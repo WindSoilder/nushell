@@ -878,6 +878,7 @@ mod windows_helper {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn read_dir(
     f: PathBuf,
 ) -> Result<
