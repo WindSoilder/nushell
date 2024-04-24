@@ -1,8 +1,8 @@
 use super::util::get_rest_for_glob_pattern;
 use crate::{DirBuilder, DirInfo};
 use chrono::{DateTime, Local, LocalResult, TimeZone, Utc};
-use nu_engine::glob_from;
 use nu_engine::{command_prelude::*, env::current_dir};
+use nu_engine::{glob_from, GLOB_CHARS};
 use nu_glob::MatchOptions;
 use nu_path::expand_to_real_path;
 use nu_protocol::{DataSource, NuGlob, PipelineMetadata};
@@ -234,16 +234,13 @@ fn ls_for_one_pattern(
 
     // it indicates we need to append an extra '*' after pattern for listing given directory
     // Example: 'ls directory' -> 'ls directory/*'
-    let mut extra_star_under_given_directory = false;
+    let mut just_read_dir = false;
     let p_tag: Span = pattern_arg.as_ref().map(|p| p.span).unwrap_or(call_span);
     let (pattern_arg, absolute_path) = match pattern_arg {
         Some(pat) => {
             // expand with cwd here is only used for checking
-            let tmp_expanded = nu_path::expand_path_with(
-                pat.item.as_ref(),
-                &cwd,
-                matches!(pat.item, NuGlob::Expand(..)),
-            );
+            let tmp_expanded =
+                nu_path::expand_path_with(pat.item.as_ref(), &cwd, pat.item.is_expand());
             // Avoid checking and pushing "*" to the path when directory (do not show contents) flag is true
             if !directory && tmp_expanded.is_dir() {
                 if permission_denied(&tmp_expanded) {
@@ -270,7 +267,7 @@ fn ls_for_one_pattern(
                 if is_empty_dir(&tmp_expanded) {
                     return Ok(Box::new(vec![].into_iter()));
                 }
-                extra_star_under_given_directory = true;
+                just_read_dir = !(pat.item.is_expand() && pat.item.as_ref().contains(GLOB_CHARS));
             }
 
             // it's absolute path if:
@@ -296,7 +293,7 @@ fn ls_for_one_pattern(
 
     let hidden_dir_specified = is_hidden_dir(pattern_arg.as_ref());
     let path = pattern_arg.into_spanned(p_tag);
-    let (prefix, paths) = if extra_star_under_given_directory {
+    let (prefix, paths) = if just_read_dir {
         let expanded = nu_path::expand_path_with(path.item.as_ref(), &cwd, path.item.is_expand());
         read_dir(expanded)?
     } else {
@@ -888,10 +885,10 @@ fn read_dir(
     ),
     ShellError,
 > {
-    let prefix = f.parent().map(|f| f.to_path_buf());
     let iter = f.read_dir()?.map(|d| {
         d.map(|r| r.path())
             .map_err(|e| ShellError::IOError { msg: e.to_string() })
     });
-    Ok((prefix, Box::new(iter)))
+    // we just read the directory, so the prefix is given `f` itself.
+    Ok((Some(f), Box::new(iter)))
 }
