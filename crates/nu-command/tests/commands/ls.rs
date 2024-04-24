@@ -240,7 +240,7 @@ fn list_files_from_two_parents_up_using_multiple_dots() {
 
         let actual = nu!(
             cwd: dirs.test().join("foo/bar"),
-            r#"ls ... | sort-by name | get name.0 | str replace '\\' '/'"#
+            r#"ls ... | sort-by name | get name.0 | str replace -a '\' '/'"#
         );
         assert_eq!(actual.out, "../../andres.xml");
     })
