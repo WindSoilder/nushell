@@ -219,9 +219,14 @@ pub fn eval_arguments_from_call(
             // glob-expansion, and inner-quotes-removal, in that order.
             for arg in eval_argument(engine_state, stack, expr, spread)? {
                 let tilde_expanded = expand_tilde(&arg);
-                for glob_expanded in expand_glob(&tilde_expanded, &cwd, expr.span)? {
-                    let inner_quotes_removed = remove_inner_quotes(&glob_expanded);
-                    args.push(inner_quotes_removed.into_owned().into_spanned(expr.span));
+                // Reduces unnecessarily glob, it can improve performance.
+                if arg.contains('*') {
+                    for glob_expanded in expand_glob(&tilde_expanded, &cwd, expr.span)? {
+                        let inner_quotes_removed = remove_inner_quotes(&glob_expanded);
+                        args.push(inner_quotes_removed.into_owned().into_spanned(expr.span));
+                    }
+                } else {
+                    args.push(arg.into_spanned(expr.span));
                 }
             }
         } else {

@@ -333,3 +333,9 @@ fn redirect_combine() {
         assert_eq!(actual.out, "FooBar");
     });
 }
+
+#[test]
+fn only_expand_glob_if_input_contains_star() {
+    let actual = nu!(pipeline("nu --testbin cococo '.'"));
+    assert_eq!(actual.out, ".");
+}
