@@ -223,16 +223,11 @@ fn ls_for_one_pattern(
                     span: path.span,
                 });
             }
-            match path.item {
-                NuGlob::DoNotExpand(p) => Some(Spanned {
-                    item: NuGlob::DoNotExpand(nu_utils::strip_ansi_string_unlikely(p)),
-                    span: path.span,
-                }),
-                NuGlob::Expand(p) => Some(Spanned {
-                    item: NuGlob::Expand(nu_utils::strip_ansi_string_unlikely(p)),
-                    span: path.span,
-                }),
-            }
+            Some(
+                path.item
+                    .strip_ansi_string_unlikely()
+                    .into_spanned(path.span),
+            )
         } else {
             pattern_arg
         }
@@ -284,13 +279,12 @@ fn ls_for_one_pattern(
             (pat.item, absolute_path)
         }
         None => {
-            // Avoid pushing "*" to the default path when directory (do not show contents) flag is true
-            if directory {
-                (NuGlob::Expand(".".to_string()), false)
-            } else if is_empty_dir(&cwd) {
+            if is_empty_dir(&cwd) {
                 return Ok(Box::new(vec![].into_iter()));
             } else {
-                (NuGlob::Expand("*".to_string()), false)
+                // read current directory.
+                just_read_dir = true;
+                (NuGlob::Expand(".".to_string()), false)
             }
         }
     };
@@ -890,4 +884,32 @@ fn read_dir(
             .map_err(|e| ShellError::IOError { msg: e.to_string() })
     });
     Ok(Box::new(iter))
+}
+
+#[allow(clippy::type_complexity)]
+pub fn ls_glob_from(
+    pattern: &Spanned<NuGlob>,
+    cwd: &Path,
+    span: Span,
+    options: Option<MatchOptions>,
+) -> Result<
+    (
+        Option<PathBuf>,
+        Box<dyn Iterator<Item = Result<PathBuf, ShellError>> + Send>,
+    ),
+    ShellError,
+> {
+    match nu_engine::glob_from(pattern, cwd, span, options) {
+        Ok((prefix, result)) => result.map(|p| {
+            p.map(|p2| {
+                if p2.is_dir() {
+                    read_dir(&p2).unwrap()
+                } else {
+                    Box::new(vec![Ok(p2)].into_iter())
+                }
+            })
+        }),
+        Err(e) => Err(e),
+    };
+    Ok((prefix, result))
 }
