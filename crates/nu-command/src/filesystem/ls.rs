@@ -932,9 +932,8 @@ pub fn ls_glob_from_using_iter(
 > {
     match nu_engine::glob_from(pattern, cwd, span, options) {
         Ok((prefix, result)) => {
-            let res_iter = result.map(|path| {
-                let path = path?;
-                if path.is_dir() {
+            let res_iter = result.map(|path| match path {
+                Ok(path) => if path.is_dir() {
                     read_dir(&path)
                 } else {
                     let result: Result<
@@ -943,6 +942,8 @@ pub fn ls_glob_from_using_iter(
                     > = Ok(Box::new(vec![Ok(path)].into_iter()));
                     result
                 }
+                .unwrap_or_else(|e| Box::new(std::iter::once(Err(e)))),
+                Err(e) => Box::new(std::iter::once(Err(e))),
             });
             Ok((prefix, Box::new(res_iter.into_iter().flatten())))
         }
