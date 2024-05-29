@@ -900,16 +900,19 @@ pub fn ls_glob_from(
     ShellError,
 > {
     match nu_engine::glob_from(pattern, cwd, span, options) {
-        Ok((prefix, result)) => result.map(|p| {
-            p.map(|p2| {
-                if p2.is_dir() {
-                    read_dir(&p2).unwrap()
+        Ok((prefix, result)) => {
+            let mut res_iter = vec![];
+            for path in result {
+                let path = path?;
+                let mut this_iter = if path.is_dir() {
+                    read_dir(&path)?.collect()
                 } else {
-                    Box::new(vec![Ok(p2)].into_iter())
-                }
-            })
-        }),
+                    vec![Ok(path)]
+                };
+                res_iter.append(&mut this_iter)
+            }
+            Ok((prefix, Box::new(res_iter.into_iter())))
+        }
         Err(e) => Err(e),
-    };
-    Ok((prefix, result))
+    }
 }
