@@ -306,7 +306,7 @@ fn ls_for_one_pattern(
             };
             Some(glob_options)
         };
-        glob_from(&path, &cwd, call_span, glob_options)?
+        ls_glob_from(&path, &cwd, call_span, glob_options)?
     };
 
     let mut paths_peek = paths.peekable();
@@ -912,6 +912,39 @@ pub fn ls_glob_from(
                 res_iter.append(&mut this_iter)
             }
             Ok((prefix, Box::new(res_iter.into_iter())))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn ls_glob_from_using_iter(
+    pattern: &Spanned<NuGlob>,
+    cwd: &Path,
+    span: Span,
+    options: Option<MatchOptions>,
+) -> Result<
+    (
+        Option<PathBuf>,
+        Box<dyn Iterator<Item = Result<PathBuf, ShellError>> + Send>,
+    ),
+    ShellError,
+> {
+    match nu_engine::glob_from(pattern, cwd, span, options) {
+        Ok((prefix, result)) => {
+            let res_iter = result.map(|path| {
+                let path = path?;
+                if path.is_dir() {
+                    read_dir(&path)
+                } else {
+                    let result: Result<
+                        Box<dyn Iterator<Item = Result<PathBuf, ShellError>> + Send>,
+                        ShellError,
+                    > = Ok(Box::new(vec![Ok(path)].into_iter()));
+                    result
+                }
+            });
+            Ok((prefix, Box::new(res_iter.into_iter().flatten())))
         }
         Err(e) => Err(e),
     }
