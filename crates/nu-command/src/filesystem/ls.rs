@@ -1,7 +1,6 @@
 use super::util::get_rest_for_glob_pattern;
 use crate::{DirBuilder, DirInfo};
 use chrono::{DateTime, Local, LocalResult, TimeZone, Utc};
-use nu_engine::glob_from;
 #[allow(deprecated)]
 use nu_engine::{command_prelude::*, env::current_dir};
 use nu_glob::MatchOptions;
@@ -306,7 +305,7 @@ fn ls_for_one_pattern(
             };
             Some(glob_options)
         };
-        ls_glob_from(&path, &cwd, call_span, glob_options)?
+        ls_glob_from(&path, &cwd, call_span, glob_options, directory)?
     };
 
     let mut paths_peek = paths.peekable();
@@ -886,12 +885,17 @@ fn read_dir(
     Ok(Box::new(iter))
 }
 
+// A simple wrapper for nu_engine::glob_from
+//
+// It's also a little bit special.  If the glob find a directory, nushell should
+// list content of the directory too.
 #[allow(clippy::type_complexity)]
 pub fn ls_glob_from(
     pattern: &Spanned<NuGlob>,
     cwd: &Path,
     span: Span,
     options: Option<MatchOptions>,
+    only_directory: bool,
 ) -> Result<
     (
         Option<PathBuf>,
@@ -901,39 +905,8 @@ pub fn ls_glob_from(
 > {
     match nu_engine::glob_from(pattern, cwd, span, options) {
         Ok((prefix, result)) => {
-            let mut res_iter = vec![];
-            for path in result {
-                let path = path?;
-                let mut this_iter = if path.is_dir() {
-                    read_dir(&path)?.collect()
-                } else {
-                    vec![Ok(path)]
-                };
-                res_iter.append(&mut this_iter)
-            }
-            Ok((prefix, Box::new(res_iter.into_iter())))
-        }
-        Err(e) => Err(e),
-    }
-}
-
-#[allow(clippy::type_complexity)]
-pub fn ls_glob_from_using_iter(
-    pattern: &Spanned<NuGlob>,
-    cwd: &Path,
-    span: Span,
-    options: Option<MatchOptions>,
-) -> Result<
-    (
-        Option<PathBuf>,
-        Box<dyn Iterator<Item = Result<PathBuf, ShellError>> + Send>,
-    ),
-    ShellError,
-> {
-    match nu_engine::glob_from(pattern, cwd, span, options) {
-        Ok((prefix, result)) => {
-            let res_iter = result.map(|path| match path {
-                Ok(path) => if path.is_dir() {
+            let res_iter = result.map(move |path| match path {
+                Ok(path) => if path.is_dir() && !only_directory {
                     read_dir(&path)
                 } else {
                     let result: Result<
