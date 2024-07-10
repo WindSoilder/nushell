@@ -115,6 +115,9 @@ with 'transpose' first."#
                 Ok(input
                     .into_iter()
                     .map_while(move |value| {
+                        if matches!(value, Value::Int { val: 3, .. }) {
+                            panic!("debug")
+                        }
                         let span = value.span();
                         let is_error = value.is_error();
                         match closure.run_with_value(value) {

@@ -267,11 +267,13 @@ fn evaluate_source(
 
     engine_state.merge_delta(delta)?;
 
+    println!("debug before eval block");
     let pipeline = if allow_return {
         eval_block_with_early_return::<WithoutDebug>(engine_state, stack, &block, input)
     } else {
         eval_block::<WithoutDebug>(engine_state, stack, &block, input)
     }?;
+    println!("after eval block, result: {pipeline:?}");
 
     let status = if let PipelineData::ByteStream(..) = pipeline {
         pipeline.print(engine_state, stack, false, false)?

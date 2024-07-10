@@ -17,10 +17,11 @@ impl Hooks {
             pre_prompt: None,
             pre_execution: None,
             env_change: None,
-            display_output: Some(Value::string(
-                "if (term size).columns >= 100 { table -e } else { table }",
-                Span::unknown(),
-            )),
+            // display_output: Some(Value::string(
+            //     "if (term size).columns >= 100 { table -e } else { table }",
+            //     Span::unknown(),
+            // )),
+            display_output: None,
             command_not_found: None,
         }
     }
