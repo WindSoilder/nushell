@@ -115,9 +115,11 @@ impl ForegroundChild {
 fn unix_wait(child_pid: Pid) -> std::io::Result<ForegroundWaitStatus> {
     use ForegroundWaitStatus::*;
 
+    println!("start waiting: ");
     // the child may be stopped multiple times, we loop until it exits
     loop {
         let status = wait::waitpid(child_pid, Some(wait::WaitPidFlag::WUNTRACED));
+        println!("debug wait result: {status:?}");
         match status {
             Err(e) => {
                 return Err(e.into());
