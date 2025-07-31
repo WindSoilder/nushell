@@ -4,9 +4,8 @@ use nu_engine::get_eval_block;
 use nu_engine::{command_prelude::*, current_dir};
 use nu_path::expand_path_with;
 use nu_protocol::{
-    ByteStreamSource, DataSource, OutDest, PipelineMetadata, Signals, ast,
+    ByteStreamSource, DataSource, OutDest, PipelineDataBody, PipelineMetadata, Signals, ast,
     byte_stream::copy_with_signals, process::ChildPipe, shell_error::io::IoError,
-    PipelineDataBody
 };
 use std::{
     fs::File,

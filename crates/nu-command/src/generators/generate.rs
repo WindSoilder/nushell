@@ -1,6 +1,6 @@
 use nu_engine::{ClosureEval, command_prelude::*};
-use nu_protocol::engine::Closure;
 use nu_protocol::PipelineDataBody;
+use nu_protocol::engine::Closure;
 
 #[derive(Clone)]
 pub struct Generate;

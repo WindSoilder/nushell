@@ -1,7 +1,7 @@
 use nu_engine::command_prelude::*;
 
-use std::collections::HashSet;
 use nu_protocol::PipelineDataBody;
+use std::collections::HashSet;
 
 #[derive(Clone)]
 pub struct DropColumn;

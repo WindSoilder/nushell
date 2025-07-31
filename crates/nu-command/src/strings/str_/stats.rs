@@ -1,10 +1,10 @@
 use fancy_regex::Regex;
 use nu_engine::command_prelude::*;
 
+use nu_protocol::PipelineDataBody;
 use std::collections::BTreeMap;
 use std::{fmt, str};
 use unicode_segmentation::UnicodeSegmentation;
-use nu_protocol::PipelineDataBody;
 
 // borrowed liberally from here https://github.com/dead10ck/uwc
 pub type Counted = BTreeMap<Counter, usize>;

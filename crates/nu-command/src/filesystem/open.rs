@@ -1,7 +1,7 @@
 #[allow(deprecated)]
 use nu_engine::{command_prelude::*, current_dir, eval_call};
 use nu_protocol::{
-    DataSource, NuGlob, PipelineMetadata, ast, PipelineDataBody,
+    DataSource, NuGlob, PipelineDataBody, PipelineMetadata, ast,
     debugger::{WithDebug, WithoutDebug},
     shell_error::{self, io::IoError},
 };

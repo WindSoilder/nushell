@@ -3,10 +3,10 @@ use lscolors::Style;
 use nu_color_config::lookup_ansi_color_style;
 use nu_engine::{command_prelude::*, env_to_string};
 use nu_protocol::Config;
+use nu_protocol::PipelineDataBody;
 use nu_term_grid::grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use nu_utils::{get_ls_colors, terminal_size};
 use std::path::Path;
-use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Griddle;

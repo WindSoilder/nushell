@@ -1,10 +1,10 @@
 use nu_cmd_base::input_handler::{CmdArgument, operate};
 use nu_engine::command_prelude::*;
 use nu_protocol::Config;
+use nu_protocol::PipelineDataBody;
 use nu_utils::get_system_locale;
 use num_format::ToFormattedString;
 use std::sync::Arc;
-use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     decimals_value: Option<i64>,

@@ -2,9 +2,9 @@ use crate::database::values::sqlite::{open_sqlite_db, values_to_sql};
 use nu_engine::command_prelude::*;
 
 use itertools::Itertools;
+use nu_protocol::PipelineDataBody;
 use nu_protocol::Signals;
 use std::path::Path;
-use nu_protocol::PipelineDataBody;
 
 pub const DEFAULT_TABLE_NAME: &str = "main";
 

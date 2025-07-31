@@ -1,7 +1,7 @@
 use super::utils::chain_error_with_input;
 use nu_engine::{ClosureEval, ClosureEvalOnce, command_prelude::*};
-use nu_protocol::engine::Closure;
 use nu_protocol::PipelineDataBody;
+use nu_protocol::engine::Closure;
 
 #[derive(Clone)]
 pub struct Each;

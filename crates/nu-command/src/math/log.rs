@@ -1,7 +1,7 @@
 use crate::math::utils::ensure_bounded;
 use nu_engine::command_prelude::*;
-use nu_protocol::Signals;
 use nu_protocol::PipelineDataBody;
+use nu_protocol::Signals;
 
 #[derive(Clone)]
 pub struct MathLog;

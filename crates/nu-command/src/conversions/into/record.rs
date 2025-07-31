@@ -1,6 +1,6 @@
 use chrono::{DateTime, Datelike, FixedOffset, Timelike};
 use nu_engine::command_prelude::*;
-use nu_protocol::{format_duration_as_timeperiod, PipelineDataBody};
+use nu_protocol::{PipelineDataBody, format_duration_as_timeperiod};
 
 #[derive(Clone)]
 pub struct IntoRecord;

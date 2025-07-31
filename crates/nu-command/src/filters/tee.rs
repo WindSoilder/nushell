@@ -4,9 +4,8 @@ use nu_protocol::process::ChildPipe;
 #[cfg(test)]
 use nu_protocol::shell_error;
 use nu_protocol::{
-    ByteStream, ByteStreamSource, OutDest, PipelineMetadata, Signals,
+    ByteStream, ByteStreamSource, OutDest, PipelineDataBody, PipelineMetadata, Signals,
     byte_stream::copy_with_signals, engine::Closure, report_shell_error, shell_error::io::IoError,
-    PipelineDataBody
 };
 use std::{
     io::{self, Read, Write},

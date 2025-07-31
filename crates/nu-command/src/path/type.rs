@@ -1,7 +1,7 @@
 use super::PathSubcommandArguments;
 use nu_engine::command_prelude::*;
 use nu_path::AbsolutePathBuf;
-use nu_protocol::{engine::StateWorkingSet, shell_error::io::IoError, PipelineDataBody};
+use nu_protocol::{PipelineDataBody, engine::StateWorkingSet, shell_error::io::IoError};
 use std::{io, path::Path};
 
 struct Arguments {

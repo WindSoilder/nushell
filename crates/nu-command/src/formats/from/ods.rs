@@ -2,8 +2,8 @@ use calamine::*;
 use indexmap::IndexMap;
 use nu_engine::command_prelude::*;
 
-use std::io::Cursor;
 use nu_protocol::PipelineDataBody;
+use std::io::Cursor;
 
 #[derive(Clone)]
 pub struct FromOds;

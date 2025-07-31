@@ -2,7 +2,7 @@ use super::PathSubcommandArguments;
 #[allow(deprecated)]
 use nu_engine::{command_prelude::*, current_dir, current_dir_const};
 use nu_path::expand_path_with;
-use nu_protocol::{engine::StateWorkingSet, shell_error::io::IoError, PipelineDataBody};
+use nu_protocol::{PipelineDataBody, engine::StateWorkingSet, shell_error::io::IoError};
 use std::path::{Path, PathBuf};
 
 struct Arguments {

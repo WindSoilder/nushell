@@ -1,6 +1,6 @@
 use fancy_regex::{Captures, Regex, RegexBuilder};
 use nu_engine::command_prelude::*;
-use nu_protocol::{ListStream, Signals, engine::StateWorkingSet, PipelineDataBody};
+use nu_protocol::{ListStream, PipelineDataBody, Signals, engine::StateWorkingSet};
 use std::collections::VecDeque;
 
 #[derive(Clone)]

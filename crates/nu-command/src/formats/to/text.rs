@@ -1,7 +1,9 @@
 use chrono::Datelike;
 use chrono_humanize::HumanTime;
 use nu_engine::command_prelude::*;
-use nu_protocol::{ByteStream, PipelineMetadata, format_duration, shell_error::io::IoError, PipelineDataBody};
+use nu_protocol::{
+    ByteStream, PipelineDataBody, PipelineMetadata, format_duration, shell_error::io::IoError,
+};
 use nu_utils::ObviousFloat;
 use std::io::Write;
 

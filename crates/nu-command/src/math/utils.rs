@@ -1,8 +1,8 @@
 use core::slice;
 use indexmap::IndexMap;
 use nu_protocol::{
-    IntoPipelineData, PipelineData, Range, ShellError, Signals, Span, Value, engine::Call,
-    PipelineDataBody
+    IntoPipelineData, PipelineData, PipelineDataBody, Range, ShellError, Signals, Span, Value,
+    engine::Call,
 };
 
 pub fn run_with_function(

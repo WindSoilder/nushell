@@ -10,9 +10,9 @@ use std::{
 use byteorder::{BigEndian, ReadBytesExt};
 use chrono::{TimeZone, Utc};
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 use nu_protocol::Signals;
 use rmp::decode::{self as mp, ValueReadError};
-use nu_protocol::PipelineDataBody;
 
 /// Max recursion depth
 const MAX_DEPTH: usize = 50;

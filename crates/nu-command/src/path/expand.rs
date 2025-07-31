@@ -5,9 +5,9 @@ use nu_engine::{
     env::{current_dir_str, current_dir_str_const},
 };
 use nu_path::{canonicalize_with, expand_path_with};
+use nu_protocol::PipelineDataBody;
 use nu_protocol::engine::StateWorkingSet;
 use std::path::Path;
-use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     strict: bool,

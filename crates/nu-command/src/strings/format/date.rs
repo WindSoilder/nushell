@@ -2,9 +2,9 @@ use crate::{generate_strftime_list, parse_date_from_string};
 use chrono::{DateTime, Datelike, Locale, TimeZone};
 use nu_engine::command_prelude::*;
 
+use nu_protocol::PipelineDataBody;
 use nu_utils::locale::{LOCALE_OVERRIDE_ENV_VAR, get_system_locale_string};
 use std::fmt::{Display, Write};
-use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct FormatDate;

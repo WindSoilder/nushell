@@ -1,7 +1,7 @@
 use nu_engine::command_prelude::*;
 use nu_protocol::ListStream;
-use std::num::NonZeroUsize;
 use nu_protocol::PipelineDataBody;
+use std::num::NonZeroUsize;
 
 #[derive(Clone)]
 pub struct Window;

@@ -1,9 +1,9 @@
 use crate::platform::input::legacy_input::LegacyInput;
 use crate::platform::input::reedline_prompt::ReedlinePrompt;
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 use nu_protocol::shell_error::{self, io::IoError};
 use reedline::{FileBackedHistory, HISTORY_SIZE, History, HistoryItem, Reedline, Signal};
-use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Input;

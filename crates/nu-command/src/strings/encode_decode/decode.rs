@@ -1,8 +1,8 @@
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 use oem_cp::decode_string_complete_table;
 use std::collections::HashMap;
 use std::sync::LazyLock;
-use nu_protocol::PipelineDataBody;
 
 // create a lazycell of all the code_table "Complete" code pages
 // the commented out code pages are "Incomplete", which means they
@@ -110,6 +110,7 @@ fn run(
     encoding: Option<Spanned<String>>,
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
+    let input_span = input.span().unwrap_or(head);
 
     match input.body() {
         PipelineDataBody::ByteStream(stream, ..) => {
@@ -148,7 +149,7 @@ fn run(
             msg: "non-binary input".into(),
             input: "value originates from here".into(),
             msg_span: head,
-            input_span: input.span().unwrap_or(head),
+            input_span,
         }),
     }
 }

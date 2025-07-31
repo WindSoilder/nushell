@@ -13,8 +13,8 @@ use nu_engine::{command_prelude::*, env_to_string};
 use nu_path::form::Absolute;
 use nu_pretty_hex::HexConfig;
 use nu_protocol::{
-    ByteStream, Config, DataSource, ListStream, PipelineMetadata, Signals, TableMode,
-    ValueIterator, shell_error::io::IoError, PipelineDataBody
+    ByteStream, Config, DataSource, ListStream, PipelineDataBody, PipelineMetadata, Signals,
+    TableMode, ValueIterator, shell_error::io::IoError,
 };
 use nu_table::{
     CollapsedTable, ExpandedTable, JustTable, NuTable, StringResult, TableOpts, TableOutput,

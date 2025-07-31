@@ -114,15 +114,19 @@ fn format_bits(
 
     let body = input.body();
     match body {
-        PipelineDataBody::ByteStream(stream, metadata) => {
-            Ok(PipelineData::byte_stream(
-                byte_stream_to_bits(stream, head),
-                metadata,
-            ))
-        }
+        PipelineDataBody::ByteStream(stream, metadata) => Ok(PipelineData::byte_stream(
+            byte_stream_to_bits(stream, head),
+            metadata,
+        )),
         _ => {
             let args = Arguments { cell_paths };
-            operate(action, args, PipelineData::from(body), call.head, engine_state.signals())
+            operate(
+                action,
+                args,
+                PipelineData::from(body),
+                call.head,
+                engine_state.signals(),
+            )
         }
     }
 }

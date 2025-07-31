@@ -2,7 +2,7 @@ use std::{borrow::Cow, ops::Deref};
 
 use nu_engine::{ClosureEval, command_prelude::*};
 use nu_protocol::{
-    ListStream, ReportMode, ShellWarning, Signals, PipelineDataBody,
+    ListStream, PipelineDataBody, ReportMode, ShellWarning, Signals,
     ast::{Expr, Expression},
     report_shell_warning,
 };
@@ -163,7 +163,10 @@ fn default(
     // If user supplies columns, check if input is a record or list of records
     // and set the default value for the specified record columns
     if !columns.is_empty() {
-        if matches!(input.get_body(), PipelineDataBody::Value(Value::Record { .. }, _)) {
+        if matches!(
+            input.get_body(),
+            PipelineDataBody::Value(Value::Record { .. }, _)
+        ) {
             let record = input.into_value(input_span)?.into_record()?;
             fill_record(
                 record,

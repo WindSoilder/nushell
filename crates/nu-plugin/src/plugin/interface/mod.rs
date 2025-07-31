@@ -627,9 +627,10 @@ impl EngineInterface {
     pub fn get_current_dir(&self) -> Result<String, ShellError> {
         match self.engine_call(EngineCall::GetCurrentDir)? {
             // Always a string, and the span doesn't matter.
-            EngineCallResponse::PipelineData(PipelineDataBody::Value(Value::String { val, .. }, _)) => {
-                Ok(val)
-            }
+            EngineCallResponse::PipelineData(PipelineDataBody::Value(
+                Value::String { val, .. },
+                _,
+            )) => Ok(val),
             EngineCallResponse::Error(err) => Err(err),
             _ => Err(ShellError::PluginFailedToDecode {
                 msg: "Received unexpected response for EngineCall::GetCurrentDir".into(),
@@ -702,9 +703,10 @@ impl EngineInterface {
     /// ```
     pub fn get_help(&self) -> Result<String, ShellError> {
         match self.engine_call(EngineCall::GetHelp)? {
-            EngineCallResponse::PipelineData(PipelineDataBody::Value(Value::String { val, .. }, _)) => {
-                Ok(val)
-            }
+            EngineCallResponse::PipelineData(PipelineDataBody::Value(
+                Value::String { val, .. },
+                _,
+            )) => Ok(val),
             _ => Err(ShellError::PluginFailedToDecode {
                 msg: "Received unexpected response type for EngineCall::GetHelp".into(),
             }),
@@ -755,9 +757,10 @@ impl EngineInterface {
     /// offsets are byte-indexed. Use [`String::from_utf8_lossy()`] for display if necessary.
     pub fn get_span_contents(&self, span: Span) -> Result<Vec<u8>, ShellError> {
         match self.engine_call(EngineCall::GetSpanContents(span))? {
-            EngineCallResponse::PipelineData(PipelineDataBody::Value(Value::Binary { val, .. }, _)) => {
-                Ok(val)
-            }
+            EngineCallResponse::PipelineData(PipelineDataBody::Value(
+                Value::Binary { val, .. },
+                _,
+            )) => Ok(val),
             _ => Err(ShellError::PluginFailedToDecode {
                 msg: "Received unexpected response type for EngineCall::GetSpanContents".into(),
             }),

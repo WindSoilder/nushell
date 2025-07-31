@@ -38,10 +38,15 @@ impl Command for Wrap {
 
         match input.body() {
             PipelineDataBody::Empty => Ok(PipelineData::empty()),
-            PipelineDataBody::Value(Value::Range { .. }, ..)
-            | PipelineDataBody::Value(Value::List { .. }, ..)
-            | PipelineDataBody::ListStream { .. } => Ok(input
+            PipelineDataBody::Value(Value::Range { val, .. }, ..) => Ok(val
                 .into_iter()
+                .map(move |x| Value::record(record! { name.clone() => x }, span))
+                .into_pipeline_data_with_metadata(span, engine_state.signals().clone(), metadata)),
+            PipelineDataBody::Value(Value::List { vals, .. }, ..) => Ok(vals
+                .into_iter()
+                .map(move |x| Value::record(record! { name.clone() => x }, span))
+                .into_pipeline_data_with_metadata(span, engine_state.signals().clone(), metadata)),
+            PipelineDataBody::ListStream { stream, .. } => Ok(stream
                 .map(move |x| Value::record(record! { name.clone() => x }, span))
                 .into_pipeline_data_with_metadata(span, engine_state.signals().clone(), metadata)),
             PipelineDataBody::ByteStream(stream, ..) => Ok(Value::record(
@@ -49,8 +54,10 @@ impl Command for Wrap {
                 span,
             )
             .into_pipeline_data_with_metadata(metadata)),
-            PipelineDataBody::Value(input, ..) => Ok(Value::record(record! { name => input }, span)
-                .into_pipeline_data_with_metadata(metadata)),
+            PipelineDataBody::Value(input, ..) => {
+                Ok(Value::record(record! { name => input }, span)
+                    .into_pipeline_data_with_metadata(metadata))
+            }
         }
     }
 

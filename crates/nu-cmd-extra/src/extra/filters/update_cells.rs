@@ -129,7 +129,10 @@ impl Command for UpdateCells {
                     internal_span,
                     columns.as_ref(),
                 );
-                Ok(PipelineData::value(Value::record(val.into_owned(), internal_span), metadata))
+                Ok(PipelineData::value(
+                    Value::record(val.into_owned(), internal_span),
+                    metadata,
+                ))
             }
             _ => Ok(UpdateCellIterator {
                 iter: PipelineData::from(body).into_iter(),

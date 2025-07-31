@@ -1,8 +1,8 @@
 use super::PathSubcommandArguments;
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 use nu_protocol::engine::StateWorkingSet;
 use std::path::{Path, PathBuf};
-use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     append: Vec<Spanned<String>>,
@@ -169,7 +169,9 @@ fn run(call: &Call, args: &Arguments, input: PipelineData) -> Result<PipelineDat
     let metadata = input.metadata();
 
     match input.body() {
-        PipelineDataBody::Value(val, md) => Ok(PipelineData::value(handle_value(val, args, head), md)),
+        PipelineDataBody::Value(val, md) => {
+            Ok(PipelineData::value(handle_value(val, args, head), md))
+        }
         PipelineDataBody::ListStream(stream, ..) => Ok(PipelineData::value(
             handle_value(stream.into_value(), args, head),
             metadata,

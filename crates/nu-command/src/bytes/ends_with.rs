@@ -65,48 +65,54 @@ impl Command for BytesEndsWith {
         let body = input.body();
         match body {
             PipelineDataBody::ByteStream(stream, ..) => {
-            let span = stream.span();
-            if pattern.is_empty() {
-                return Ok(Value::bool(true, head).into_pipeline_data());
-            }
-            let Some(mut reader) = stream.reader() else {
-                return Ok(Value::bool(false, head).into_pipeline_data());
-            };
-            let cap = pattern.len();
-            let mut end = VecDeque::<u8>::with_capacity(cap);
-            loop {
-                let buf = match reader.fill_buf() {
-                    Ok(&[]) => break,
-                    Ok(buf) => buf,
-                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(e) => return Err(IoError::new(e, span, None).into()),
-                };
-                let len = buf.len();
-                if len >= cap {
-                    end.clear();
-                    end.extend(&buf[(len - cap)..])
-                } else {
-                    let new_len = len + end.len();
-                    if new_len > cap {
-                        // The `drain` below will panic if `(new_len - cap) > end.len()`.
-                        // But this cannot happen since we know `len < cap` (as checked above):
-                        //   (len + end.len() - cap) > end.len()
-                        //   => (len - cap) > 0
-                        //   => len > cap
-                        end.drain(..(new_len - cap));
-                    }
-                    end.extend(buf);
+                let span = stream.span();
+                if pattern.is_empty() {
+                    return Ok(Value::bool(true, head).into_pipeline_data());
                 }
-                reader.consume(len);
-            }
-            Ok(Value::bool(end == pattern, head).into_pipeline_data())
+                let Some(mut reader) = stream.reader() else {
+                    return Ok(Value::bool(false, head).into_pipeline_data());
+                };
+                let cap = pattern.len();
+                let mut end = VecDeque::<u8>::with_capacity(cap);
+                loop {
+                    let buf = match reader.fill_buf() {
+                        Ok(&[]) => break,
+                        Ok(buf) => buf,
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) => return Err(IoError::new(e, span, None).into()),
+                    };
+                    let len = buf.len();
+                    if len >= cap {
+                        end.clear();
+                        end.extend(&buf[(len - cap)..])
+                    } else {
+                        let new_len = len + end.len();
+                        if new_len > cap {
+                            // The `drain` below will panic if `(new_len - cap) > end.len()`.
+                            // But this cannot happen since we know `len < cap` (as checked above):
+                            //   (len + end.len() - cap) > end.len()
+                            //   => (len - cap) > 0
+                            //   => len > cap
+                            end.drain(..(new_len - cap));
+                        }
+                        end.extend(buf);
+                    }
+                    reader.consume(len);
+                }
+                Ok(Value::bool(end == pattern, head).into_pipeline_data())
             }
             _ => {
                 let arg = Arguments {
                     pattern,
                     cell_paths,
                 };
-                operate(ends_with, arg, PipelineData::from(body), head, engine_state.signals())
+                operate(
+                    ends_with,
+                    arg,
+                    PipelineData::from(body),
+                    head,
+                    engine_state.signals(),
+                )
             }
         }
     }

@@ -128,7 +128,7 @@ fn into_binary(
     let cell_paths = call.rest(engine_state, stack, 0)?;
     let cell_paths = (!cell_paths.is_empty()).then_some(cell_paths);
 
-    let body = input;
+    let body = input.body();
     match body {
         PipelineDataBody::ByteStream(stream, metadata) => {
             // Just set the type - that should be good enough
@@ -142,7 +142,13 @@ fn into_binary(
                 cell_paths,
                 compact: call.has_flag(engine_state, stack, "compact")?,
             };
-            operate(action, args, PipelineData::from(body), head, engine_state.signals())
+            operate(
+                action,
+                args,
+                PipelineData::from(body),
+                head,
+                engine_state.signals(),
+            )
         }
     }
 }

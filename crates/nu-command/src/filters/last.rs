@@ -1,7 +1,7 @@
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 use nu_protocol::shell_error::io::IoError;
 use std::{collections::VecDeque, io::Read};
-use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Last;
@@ -94,7 +94,8 @@ impl Command for Last {
         }
 
         match input.body() {
-            PipelineDataBody::ListStream(_, _) | PipelineDataBody::Value(Value::Range { .. }, _) => {
+            PipelineDataBody::ListStream(_, _)
+            | PipelineDataBody::Value(Value::Range { .. }, _) => {
                 let iterator = input.into_iter_strict(head)?;
 
                 // only keep the last `rows` in memory

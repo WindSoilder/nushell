@@ -2,8 +2,8 @@ use dialoguer::{FuzzySelect, MultiSelect, Select, console::Term};
 use nu_engine::command_prelude::*;
 use nu_protocol::shell_error::io::IoError;
 
-use std::fmt::{Display, Formatter};
 use nu_protocol::PipelineDataBody;
+use std::fmt::{Display, Formatter};
 
 enum InteractMode {
     Single(Option<usize>),
@@ -84,9 +84,7 @@ impl Command for InputList {
         let config = stack.get_config(engine_state);
 
         let options: Vec<Options> = match input.body() {
-            PipelineDataBody::Value(Value::Range { .. }, ..)
-            | PipelineDataBody::Value(Value::List { .. }, ..)
-            | PipelineDataBody::ListStream { .. } => input
+            PipelineDataBody::Value(Value::Range { val, .. }, ..) => val
                 .into_iter()
                 .map(move |val| {
                     let display_value = if let Some(ref cellpath) = display_path {
@@ -101,7 +99,35 @@ impl Command for InputList {
                     })
                 })
                 .collect::<Result<Vec<_>, ShellError>>()?,
-
+            PipelineDataBody::Value(Value::List { vals, .. }, ..) => vals
+                .into_iter()
+                .map(move |val| {
+                    let display_value = if let Some(ref cellpath) = display_path {
+                        val.follow_cell_path(&cellpath.members)?
+                            .to_expanded_string(", ", &config)
+                    } else {
+                        val.to_expanded_string(", ", &config)
+                    };
+                    Ok(Options {
+                        name: display_value,
+                        value: val,
+                    })
+                })
+                .collect::<Result<Vec<_>, ShellError>>()?,
+            PipelineDataBody::ListStream { stream, .. } => stream
+                .map(move |val| {
+                    let display_value = if let Some(ref cellpath) = display_path {
+                        val.follow_cell_path(&cellpath.members)?
+                            .to_expanded_string(", ", &config)
+                    } else {
+                        val.to_expanded_string(", ", &config)
+                    };
+                    Ok(Options {
+                        name: display_value,
+                        value: val,
+                    })
+                })
+                .collect::<Result<Vec<_>, ShellError>>()?,
             _ => {
                 return Err(ShellError::TypeMismatch {
                     err_message: "expected a list, a table, or a range".to_string(),

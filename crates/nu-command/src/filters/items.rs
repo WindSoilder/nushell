@@ -1,7 +1,7 @@
 use super::utils::chain_error_with_input;
 use nu_engine::{ClosureEval, command_prelude::*};
-use nu_protocol::engine::Closure;
 use nu_protocol::PipelineDataBody;
+use nu_protocol::engine::Closure;
 
 #[derive(Clone)]
 pub struct Items;
@@ -78,18 +78,22 @@ impl Command for Items {
                     }),
                 }
             }
-            PipelineDataBody::ListStream(stream, ..) => Err(ShellError::OnlySupportsThisInputType {
-                exp_input_type: "record".into(),
-                wrong_type: "stream".into(),
-                dst_span: call.head,
-                src_span: stream.span(),
-            }),
-            PipelineDataBody::ByteStream(stream, ..) => Err(ShellError::OnlySupportsThisInputType {
-                exp_input_type: "record".into(),
-                wrong_type: stream.type_().describe().into(),
-                dst_span: call.head,
-                src_span: stream.span(),
-            }),
+            PipelineDataBody::ListStream(stream, ..) => {
+                Err(ShellError::OnlySupportsThisInputType {
+                    exp_input_type: "record".into(),
+                    wrong_type: "stream".into(),
+                    dst_span: call.head,
+                    src_span: stream.span(),
+                })
+            }
+            PipelineDataBody::ByteStream(stream, ..) => {
+                Err(ShellError::OnlySupportsThisInputType {
+                    exp_input_type: "record".into(),
+                    wrong_type: stream.type_().describe().into(),
+                    dst_span: call.head,
+                    src_span: stream.span(),
+                })
+            }
         }
         .map(|data| data.set_metadata(metadata))
     }

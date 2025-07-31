@@ -1,5 +1,5 @@
 use nu_engine::command_prelude::*;
-use nu_protocol::{IntoValue, ast::PathMember, casing::Casing, PipelineDataBody};
+use nu_protocol::{IntoValue, PipelineDataBody, ast::PathMember, casing::Casing};
 
 #[derive(Clone)]
 pub struct SplitCellPath;

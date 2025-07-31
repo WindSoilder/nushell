@@ -1,5 +1,5 @@
 use nu_engine::command_prelude::*;
-use nu_protocol::{Signals, shell_error::io::IoError, PipelineDataBody};
+use nu_protocol::{PipelineDataBody, Signals, shell_error::io::IoError};
 use std::io::Read;
 
 #[derive(Clone)]

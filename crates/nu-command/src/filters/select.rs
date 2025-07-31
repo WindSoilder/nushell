@@ -1,7 +1,7 @@
 use nu_engine::command_prelude::*;
 use nu_protocol::{
-    DeprecationEntry, DeprecationType, PipelineIterator, ReportMode, ast::PathMember,
-    casing::Casing, PipelineDataBody
+    DeprecationEntry, DeprecationType, PipelineDataBody, PipelineIterator, ReportMode,
+    ast::PathMember, casing::Casing,
 };
 use std::collections::BTreeSet;
 
