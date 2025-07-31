@@ -1,6 +1,6 @@
 use super::utils::chain_error_with_input;
 use nu_engine::{ClosureEvalOnce, command_prelude::*};
-use nu_protocol::{Signals, engine::Closure};
+use nu_protocol::{Signals, engine::Closure, PipelineDataBody};
 use rayon::prelude::*;
 
 #[derive(Clone)]

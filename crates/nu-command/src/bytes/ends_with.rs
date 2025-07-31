@@ -1,6 +1,6 @@
 use nu_cmd_base::input_handler::{CmdArgument, operate};
 use nu_engine::command_prelude::*;
-use nu_protocol::shell_error::io::IoError;
+use nu_protocol::{PipelineDataBody, shell_error::io::IoError};
 use std::{
     collections::VecDeque,
     io::{self, BufRead},
@@ -62,7 +62,9 @@ impl Command for BytesEndsWith {
         let cell_paths: Vec<CellPath> = call.rest(engine_state, stack, 1)?;
         let cell_paths = (!cell_paths.is_empty()).then_some(cell_paths);
 
-        if let PipelineDataBody::ByteStream(stream, ..) = input {
+        let body = input.body();
+        match body {
+            PipelineDataBody::ByteStream(stream, ..) => {
             let span = stream.span();
             if pattern.is_empty() {
                 return Ok(Value::bool(true, head).into_pipeline_data());
@@ -98,12 +100,14 @@ impl Command for BytesEndsWith {
                 reader.consume(len);
             }
             Ok(Value::bool(end == pattern, head).into_pipeline_data())
-        } else {
-            let arg = Arguments {
-                pattern,
-                cell_paths,
-            };
-            operate(ends_with, arg, input, head, engine_state.signals())
+            }
+            _ => {
+                let arg = Arguments {
+                    pattern,
+                    cell_paths,
+                };
+                operate(ends_with, arg, PipelineData::from(body), head, engine_state.signals())
+            }
         }
     }
 

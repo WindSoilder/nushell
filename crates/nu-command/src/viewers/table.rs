@@ -15,7 +15,7 @@ use nu_pretty_hex::HexConfig;
 use nu_protocol::{
     ByteStream, Config, DataSource, ListStream, PipelineMetadata, Signals, TableMode,
     ValueIterator, shell_error::io::IoError,
-};
+, PipelineDataBody};
 use nu_table::{
     CollapsedTable, ExpandedTable, JustTable, NuTable, StringResult, TableOpts, TableOutput,
     common::configure_table,

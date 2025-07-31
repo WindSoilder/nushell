@@ -1,5 +1,5 @@
 use nu_engine::command_prelude::*;
-use nu_protocol::{DeprecationEntry, DeprecationType, ReportMode, ast::PathMember, casing::Casing};
+use nu_protocol::{DeprecationEntry, DeprecationType, ReportMode, ast::PathMember, casing::Casing, PipelineDataBody};
 use std::{cmp::Reverse, collections::HashSet};
 
 #[derive(Clone)]

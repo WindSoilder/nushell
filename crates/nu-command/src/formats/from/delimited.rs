@@ -1,5 +1,5 @@
 use csv::{ReaderBuilder, Trim};
-use nu_protocol::{ByteStream, ListStream, PipelineData, ShellError, Signals, Span, Value};
+use nu_protocol::{ByteStream, ListStream, PipelineData, ShellError, Signals, Span, Value, PipelineDataBody};
 
 fn from_csv_error(err: csv::Error, span: Span) -> ShellError {
     ShellError::DelimiterError {

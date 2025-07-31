@@ -1,7 +1,7 @@
 use std::io::{BufRead, Cursor};
 
 use nu_engine::command_prelude::*;
-use nu_protocol::{ListStream, Signals, shell_error::io::IoError};
+use nu_protocol::{ListStream, Signals, shell_error::io::IoError, PipelineDataBody};
 
 #[derive(Clone)]
 pub struct FromJson;
