@@ -5,8 +5,8 @@ use nu_color_config::{color_record_to_nustyle, lookup_ansi_color_style};
 use nu_engine::eval_block;
 use nu_parser::parse;
 use nu_protocol::{
-    Config, EditBindings, FromValue, ParsedKeybinding, ParsedMenu, PipelineData, PipelineDataBody, Record,
-    ShellError, Span, Type, Value,
+    Config, EditBindings, FromValue, ParsedKeybinding, ParsedMenu, PipelineData, PipelineDataBody,
+    Record, ShellError, Span, Type, Value,
     debugger::WithoutDebug,
     engine::{EngineState, Stack, StateWorkingSet},
     extract_value,
