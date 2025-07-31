@@ -555,8 +555,9 @@ fn value_should_be_printed(
 
 fn split_string_if_multiline(input: PipelineData, head_span: Span) -> PipelineData {
     let span = input.span().unwrap_or(head_span);
+    let metadata = input.metadata();
     match input.body() {
-        PipelineDataBody::Value(Value::String { ref val, .. }, _) => {
+        PipelineDataBody::Value(Value::String { val, .. }, _) => {
             if val.contains('\n') {
                 Value::list(
                     val.lines()
@@ -564,12 +565,12 @@ fn split_string_if_multiline(input: PipelineData, head_span: Span) -> PipelineDa
                         .collect(),
                     span,
                 )
-                .into_pipeline_data_with_metadata(input.metadata())
+                .into_pipeline_data_with_metadata(metadata)
             } else {
-                input
+                PipelineData::value(Value::String { val, internal_span: span }, metadata)
             }
         }
-        _ => input,
+        other => PipelineData::from(other).set_metadata(metadata),
     }
 }
 

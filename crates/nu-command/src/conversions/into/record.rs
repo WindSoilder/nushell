@@ -111,6 +111,7 @@ impl Command for IntoRecord {
 fn into_record(call: &Call, input: PipelineData) -> Result<PipelineData, ShellError> {
     let span = input.span().unwrap_or(call.head);
     let metadata = input.metadata();
+    let pipeline_type = input.get_type();
     match input.body() {
         PipelineDataBody::Value(Value::Date { val, .. }, _) => {
             Ok(parse_date_into_record(val, span).into_pipeline_data())
@@ -118,7 +119,7 @@ fn into_record(call: &Call, input: PipelineData) -> Result<PipelineData, ShellEr
         PipelineDataBody::Value(Value::Duration { val, .. }, _) => {
             Ok(parse_duration_into_record(val, span).into_pipeline_data())
         }
-        PipelineDataBody::Value(Value::List { .. }, _) | PipelineDataBody::ListStream(..) => {
+        PipelineDataBody::Value(Value::List { vals, .. }, _) => {
             let mut record = Record::new();
 
             enum ExpectedType {
@@ -127,7 +128,7 @@ fn into_record(call: &Call, input: PipelineData) -> Result<PipelineData, ShellEr
             }
             let mut expected_type = None;
 
-            for item in input.into_iter() {
+            for item in vals {
                 let span = item.span();
                 match item {
                     Value::Record { val, .. }
@@ -177,10 +178,71 @@ fn into_record(call: &Call, input: PipelineData) -> Result<PipelineData, ShellEr
             }
             Ok(Value::record(record, span).into_pipeline_data_with_metadata(metadata))
         }
-        PipelineDataBody::Value(Value::Record { .. }, _) => Ok(input),
+        PipelineDataBody::ListStream(stream, _) => {
+            let mut record = Record::new();
+
+            enum ExpectedType {
+                Record,
+                Pair,
+            }
+            let mut expected_type = None;
+
+            for item in stream {
+                let span = item.span();
+                match item {
+                    Value::Record { val, .. }
+                        if matches!(expected_type, None | Some(ExpectedType::Record)) =>
+                    {
+                        // Don't use .extend() unless that gets changed to check for duplicate keys
+                        for (key, val) in val.into_owned() {
+                            record.insert(key, val);
+                        }
+                        expected_type = Some(ExpectedType::Record);
+                    }
+                    Value::List { mut vals, .. }
+                        if matches!(expected_type, None | Some(ExpectedType::Pair)) =>
+                    {
+                        if vals.len() == 2 {
+                            let (val, key) = vals.pop().zip(vals.pop()).expect("length is < 2");
+                            record.insert(key.coerce_into_string()?, val);
+                        } else {
+                            return Err(ShellError::IncorrectValue {
+                                msg: format!(
+                                    "expected inner list with two elements, but found {} element(s)",
+                                    vals.len()
+                                ),
+                                val_span: span,
+                                call_span: call.head,
+                            });
+                        }
+                        expected_type = Some(ExpectedType::Pair);
+                    }
+                    Value::Nothing { .. } => {}
+                    Value::Error { error, .. } => return Err(*error),
+                    _ => {
+                        return Err(ShellError::TypeMismatch {
+                            err_message: format!(
+                                "expected {}, found {} (while building record from list)",
+                                match expected_type {
+                                    Some(ExpectedType::Record) => "record",
+                                    Some(ExpectedType::Pair) => "list with two elements",
+                                    None => "record or list with two elements",
+                                },
+                                item.get_type(),
+                            ),
+                            span,
+                        });
+                    }
+                }
+            }
+            Ok(Value::record(record, span).into_pipeline_data_with_metadata(metadata))
+        }
+        PipelineDataBody::Value(Value::Record { val, .. }, _) => {
+            Ok(PipelineData::value(Value::Record { val, internal_span: span }, metadata))
+        }
         PipelineDataBody::Value(Value::Error { error, .. }, _) => Err(*error),
-        other => Err(ShellError::TypeMismatch {
-            err_message: format!("Can't convert {} to record", other.get_type()),
+        _ => Err(ShellError::TypeMismatch {
+            err_message: format!("Can't convert {} to record", pipeline_type),
             span,
         }),
     }

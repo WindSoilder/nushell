@@ -55,7 +55,7 @@ impl Command for DateFromHuman {
         }
         let head = call.head;
         // This doesn't match explicit nulls
-        if matches!(input, PipelineDataBody::Empty) {
+        if matches!(input.get_body(), PipelineDataBody::Empty) {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
         input.map(move |value| helper(value, head), engine_state.signals())

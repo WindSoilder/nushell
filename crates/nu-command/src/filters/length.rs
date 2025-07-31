@@ -67,6 +67,7 @@ impl Command for Length {
 
 fn length_row(call: &Call, input: PipelineData) -> Result<PipelineData, ShellError> {
     let span = input.span().unwrap_or(call.head);
+    let input_type = input.get_type();
     match input.body() {
         PipelineDataBody::Empty | PipelineDataBody::Value(Value::Nothing { .. }, ..) => {
             Ok(Value::int(0, call.head).into_pipeline_data())
@@ -92,7 +93,7 @@ fn length_row(call: &Call, input: PipelineData) -> Result<PipelineData, ShellErr
         }
         _ => Err(ShellError::OnlySupportsThisInputType {
             exp_input_type: "list, table, binary, and nothing".into(),
-            wrong_type: input.get_type().to_string(),
+            wrong_type: input_type.to_string(),
             dst_span: call.head,
             src_span: span,
         }),

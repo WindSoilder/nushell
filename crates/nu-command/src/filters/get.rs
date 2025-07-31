@@ -188,7 +188,7 @@ fn action(
         }
     }
 
-    if let PipelineDataBody::Empty = input {
+    if let PipelineDataBody::Empty = input.get_body() {
         return Err(ShellError::PipelineEmpty { dst_span: span });
     }
 
@@ -227,8 +227,12 @@ pub fn follow_cell_path_into_stream(
     let has_int_member = cell_path
         .iter()
         .any(|it| matches!(it, PathMember::Int { .. }));
-    match data {
-        PipelineDataBody::ListStream(stream, ..) if !has_int_member => {
+    match data.get_body() {
+        PipelineDataBody::ListStream(_, ..) if !has_int_member => {
+            let stream = match data.body() {
+                PipelineDataBody::ListStream(stream, ..) => stream,
+                _ => unreachable!(),
+            };
             let result = stream
                 .into_iter()
                 .map(move |value| {

@@ -93,7 +93,7 @@ impl Command for Last {
             return Ok(Value::list(Vec::new(), head).into_pipeline_data_with_metadata(metadata));
         }
 
-        match input.body() {
+        match input.get_body() {
             PipelineDataBody::ListStream(_, _)
             | PipelineDataBody::Value(Value::Range { .. }, _) => {
                 let iterator = input.into_iter_strict(head)?;
@@ -149,7 +149,7 @@ impl Command for Last {
                         }
                     }
                     // Propagate errors by explicitly matching them before the final case.
-                    Value::Error { error, .. } => Err(*error),
+                    Value::Error { error, .. } => Err(**error),
                     other => Err(ShellError::OnlySupportsThisInputType {
                         exp_input_type: "list, binary or range".into(),
                         wrong_type: other.get_type().to_string(),
