@@ -1,5 +1,6 @@
 use nu_engine::{ClosureEval, ClosureEvalOnce, command_prelude::*};
 use nu_protocol::ast::PathMember;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Update;

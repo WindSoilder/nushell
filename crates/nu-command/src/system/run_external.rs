@@ -2,7 +2,7 @@ use nu_cmd_base::hook::eval_hook;
 use nu_engine::{command_prelude::*, env_to_strings};
 use nu_path::{AbsolutePath, dots::expand_ndots_safe, expand_tilde};
 use nu_protocol::{
-    ByteStream, NuGlob, OutDest, Signals, UseAnsiColoring, did_you_mean,
+    ByteStream, NuGlob, OutDest, Signals, UseAnsiColoring, did_you_mean, PipelineDataBody,
     process::{ChildProcess, PostWaitCallback},
     shell_error::io::IoError,
 };

@@ -4,6 +4,7 @@ use crate::network::http::client::{
     request_handle_response, request_set_timeout, send_request,
 };
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct HttpPut;

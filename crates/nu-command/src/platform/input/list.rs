@@ -3,6 +3,7 @@ use nu_engine::command_prelude::*;
 use nu_protocol::shell_error::io::IoError;
 
 use std::fmt::{Display, Formatter};
+use nu_protocol::PipelineDataBody;
 
 enum InteractMode {
     Single(Option<usize>),

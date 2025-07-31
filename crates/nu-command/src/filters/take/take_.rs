@@ -1,5 +1,6 @@
 use nu_engine::command_prelude::*;
 use nu_protocol::Signals;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Take;

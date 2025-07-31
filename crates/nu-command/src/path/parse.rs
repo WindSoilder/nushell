@@ -2,6 +2,7 @@ use super::PathSubcommandArguments;
 use nu_engine::command_prelude::*;
 use nu_protocol::engine::StateWorkingSet;
 use std::path::Path;
+use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     extension: Option<Spanned<String>>,

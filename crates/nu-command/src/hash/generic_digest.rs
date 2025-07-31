@@ -1,6 +1,7 @@
 use nu_cmd_base::input_handler::{CmdArgument, operate};
 use nu_engine::command_prelude::*;
 use std::{io::Write, marker::PhantomData};
+use nu_protocol::PipelineDataBody;
 
 pub trait HashDigest: digest::Digest + Clone {
     fn name() -> &'static str;

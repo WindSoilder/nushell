@@ -6,6 +6,7 @@ use nu_protocol::Config;
 use nu_term_grid::grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use nu_utils::{get_ls_colors, terminal_size};
 use std::path::Path;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Griddle;

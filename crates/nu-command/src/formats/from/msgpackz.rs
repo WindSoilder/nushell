@@ -3,6 +3,7 @@ use std::io::Cursor;
 use nu_engine::command_prelude::*;
 
 use super::msgpack::{Opts, read_msgpack};
+use nu_protocol::PipelineDataBody;
 
 const BUFFER_SIZE: usize = 65536;
 

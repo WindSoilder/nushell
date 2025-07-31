@@ -2,8 +2,8 @@ use csv::WriterBuilder;
 use nu_cmd_base::formats::to::delimited::merge_descriptors;
 use nu_protocol::{
     ByteStream, ByteStreamType, Config, PipelineData, ShellError, Signals, Span, Spanned, Value,
-    shell_error::io::IoError,
-, PipelineDataBody};
+    shell_error::io::IoError, PipelineDataBody
+};
 use std::{iter, sync::Arc};
 
 fn make_csv_error(error: csv::Error, format_name: &str, head: Span) -> ShellError {

@@ -2,6 +2,7 @@ use nu_engine::command_prelude::*;
 use oem_cp::decode_string_complete_table;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use nu_protocol::PipelineDataBody;
 
 // create a lazycell of all the code_table "Complete" code pages
 // the commented out code pages are "Incomplete", which means they

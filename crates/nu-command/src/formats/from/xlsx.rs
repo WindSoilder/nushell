@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 use nu_engine::command_prelude::*;
 
 use std::io::Cursor;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct FromXlsx;

@@ -1,5 +1,6 @@
 use nu_cmd_base::input_handler::{CmdArgument, operate};
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     cell_paths: Option<Vec<CellPath>>,

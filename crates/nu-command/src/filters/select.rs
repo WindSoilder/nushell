@@ -1,8 +1,8 @@
 use nu_engine::command_prelude::*;
 use nu_protocol::{
     DeprecationEntry, DeprecationType, PipelineIterator, ReportMode, ast::PathMember,
-    casing::Casing,
-, PipelineDataBody};
+    casing::Casing, PipelineDataBody
+};
 use std::collections::BTreeSet;
 
 #[derive(Clone)]

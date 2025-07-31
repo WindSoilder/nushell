@@ -4,6 +4,7 @@ use nu_engine::command_prelude::*;
 
 use nu_utils::locale::{LOCALE_OVERRIDE_ENV_VAR, get_system_locale_string};
 use std::fmt::{Display, Write};
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct FormatDate;

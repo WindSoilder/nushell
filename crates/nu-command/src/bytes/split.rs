@@ -1,4 +1,5 @@
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct BytesSplit;
@@ -72,15 +73,20 @@ impl Command for BytesSplit {
             });
         }
 
-        let (split_read, md) = match input {
+        let (split_read, md) = match input.body() {
             PipelineDataBody::Value(Value::Binary { val, .. }, md) => (
                 ByteStream::read_binary(val, head, engine_state.signals().clone()).split(separator),
                 md,
             ),
             PipelineDataBody::ByteStream(stream, md) => (stream.split(separator), md),
-            input => {
-                let span = input.span().unwrap_or(head);
-                return Err(input.unsupported_input_error("bytes", span));
+            body => {
+                let span = head; // Use head span as fallback
+                return Err(ShellError::UnsupportedInput {
+                    msg: "Input data is not supported by this command".into(),
+                    input: "Only binary values and byte streams are supported".into(),
+                    msg_span: span,
+                    input_span: span,
+                });
             }
         };
         if let Some(split) = split_read {

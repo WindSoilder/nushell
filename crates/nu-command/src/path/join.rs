@@ -2,6 +2,7 @@ use super::PathSubcommandArguments;
 use nu_engine::command_prelude::*;
 use nu_protocol::engine::StateWorkingSet;
 use std::path::{Path, PathBuf};
+use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     append: Vec<Spanned<String>>,

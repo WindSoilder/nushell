@@ -7,6 +7,7 @@ use nu_engine::{
 use nu_path::{canonicalize_with, expand_path_with};
 use nu_protocol::engine::StateWorkingSet;
 use std::path::Path;
+use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     strict: bool,

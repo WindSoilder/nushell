@@ -3,6 +3,7 @@
 use data_encoding::Encoding;
 
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 
 mod base32;
 mod base32hex;

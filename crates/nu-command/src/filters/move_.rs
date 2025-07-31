@@ -1,6 +1,7 @@
 use std::ops::Not;
 
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone, Debug)]
 enum Location {

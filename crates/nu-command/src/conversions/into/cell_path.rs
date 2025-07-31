@@ -109,7 +109,7 @@ impl Command for IntoCellPath {
 fn into_cell_path(call: &Call, input: PipelineData) -> Result<PipelineData, ShellError> {
     let head = call.head;
 
-    match input {
+    match input.body() {
         PipelineDataBody::Value(value, _) => Ok(value_to_cell_path(value, head)?.into_pipeline_data()),
         PipelineDataBody::ListStream(stream, ..) => {
             let list: Vec<_> = stream.into_iter().collect();

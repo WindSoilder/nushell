@@ -1,5 +1,6 @@
 use nu_engine::command_prelude::*;
 use nu_protocol::DataSource;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct MetadataSet;

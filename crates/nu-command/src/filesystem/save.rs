@@ -6,6 +6,7 @@ use nu_path::expand_path_with;
 use nu_protocol::{
     ByteStreamSource, DataSource, OutDest, PipelineMetadata, Signals, ast,
     byte_stream::copy_with_signals, process::ChildPipe, shell_error::io::IoError,
+    PipelineDataBody
 };
 use std::{
     fs::File,

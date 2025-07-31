@@ -3,6 +3,7 @@ use nu_ansi_term::Style;
 use nu_color_config::StyleComputer;
 use nu_engine::command_prelude::*;
 use nu_protocol::Config;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Find;

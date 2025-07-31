@@ -1,5 +1,6 @@
 use super::delimited::{DelimitedReaderConfig, from_delimited_data, trim_from_str};
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct FromCsv;

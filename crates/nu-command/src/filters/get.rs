@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use nu_engine::command_prelude::*;
-use nu_protocol::{DeprecationEntry, DeprecationType, ReportMode, Signals, ast::PathMember};
+use nu_protocol::{DeprecationEntry, DeprecationType, ReportMode, Signals, PipelineDataBody, ast::PathMember};
 
 #[derive(Clone)]
 pub struct Get;

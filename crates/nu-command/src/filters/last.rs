@@ -1,6 +1,7 @@
 use nu_engine::command_prelude::*;
 use nu_protocol::shell_error::io::IoError;
 use std::{collections::VecDeque, io::Read};
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct Last;

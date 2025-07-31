@@ -2,6 +2,7 @@ use super::utils::chain_error_with_input;
 use nu_engine::{ClosureEval, command_prelude::*};
 use nu_protocol::Signals;
 use nu_protocol::engine::Closure;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct ChunkBy;

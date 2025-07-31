@@ -2,6 +2,7 @@ use super::parser::datetime_in_timezone;
 use crate::date::utils::parse_date_from_string;
 use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone};
 use nu_engine::command_prelude::*;
+use nu_protocol::PipelineDataBody;
 
 #[derive(Clone)]
 pub struct DateToTimezone;

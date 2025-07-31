@@ -3,6 +3,7 @@ use nu_engine::command_prelude::*;
 use nu_path::expand_to_real_path;
 use nu_protocol::engine::StateWorkingSet;
 use std::path::Path;
+use nu_protocol::PipelineDataBody;
 
 struct Arguments {
     path: Spanned<String>,

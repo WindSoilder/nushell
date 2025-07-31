@@ -175,9 +175,11 @@ impl Command for Do {
                                 OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value
                             ) =>
                     {
-                #[cfg(feature = "os")]
-                if let ByteStreamSource::Child(child) = stream.source_mut() {
-                    child.ignore_error(true);
+                        #[cfg(feature = "os")]
+                        if let ByteStreamSource::Child(child) = stream.source_mut() {
+                            child.ignore_error(true);
+                        }
+                        Ok(PipelineData::byte_stream(stream, metadata))
                     }
                     PipelineDataBody::Value(Value::Error { .. }, ..) if ignore_all_errors => {
                         Ok(PipelineData::empty())

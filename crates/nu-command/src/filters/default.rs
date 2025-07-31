@@ -2,7 +2,7 @@ use std::{borrow::Cow, ops::Deref};
 
 use nu_engine::{ClosureEval, command_prelude::*};
 use nu_protocol::{
-    ListStream, ReportMode, ShellWarning, Signals,
+    ListStream, ReportMode, ShellWarning, Signals, PipelineDataBody,
     ast::{Expr, Expression},
     report_shell_warning,
 };
