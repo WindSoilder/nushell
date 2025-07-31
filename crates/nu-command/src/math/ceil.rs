@@ -44,7 +44,7 @@ impl Command for MathCeil {
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
         // This doesn't match explicit nulls
-        if matches!(input, PipelineDataBody::Empty) {
+        if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
         if let PipelineDataBody::Value(
@@ -53,7 +53,7 @@ impl Command for MathCeil {
                 internal_span,
             },
             ..,
-        ) = input
+        ) = input.get_body()
         {
             ensure_bounded(val.as_ref(), internal_span, head)?;
         }
@@ -68,7 +68,7 @@ impl Command for MathCeil {
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
         // This doesn't match explicit nulls
-        if matches!(input, PipelineDataBody::Empty) {
+        if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
         if let PipelineDataBody::Value(
@@ -77,7 +77,7 @@ impl Command for MathCeil {
                 internal_span,
             },
             ..,
-        ) = input
+        ) = input.get_body()
         {
             ensure_bounded(val.as_ref(), internal_span, head)?;
         }

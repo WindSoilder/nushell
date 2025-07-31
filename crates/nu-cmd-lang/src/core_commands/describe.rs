@@ -240,7 +240,7 @@ fn run(
     let head = call.head;
     let metadata = input.metadata();
 
-    let description = match input {
+    let description = match input.body() {
         PipelineDataBody::ByteStream(stream, ..) => {
             let type_ = stream.type_().describe();
 

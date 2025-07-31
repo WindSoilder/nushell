@@ -71,7 +71,7 @@ impl Command for EachWhile {
         let closure: Closure = call.req(engine_state, stack, 0)?;
 
         let metadata = input.metadata();
-        match input {
+        match input.body() {
             PipelineDataBody::Empty => Ok(PipelineData::empty()),
             PipelineDataBody::Value(Value::Range { .. }, ..)
             | PipelineDataBody::Value(Value::List { .. }, ..)
