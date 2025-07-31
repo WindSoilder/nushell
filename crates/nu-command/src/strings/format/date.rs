@@ -168,7 +168,7 @@ fn run(
     }
 
     // This doesn't match explicit nulls
-    if matches!(input, PipelineDataBody::Empty) {
+    if matches!(input.get_body(), PipelineDataBody::Empty) {
         return Err(ShellError::PipelineEmpty { dst_span: head });
     }
     input.map(

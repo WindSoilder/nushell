@@ -177,7 +177,7 @@ fn string_helper(
             };
             Ok(PipelineData::byte_stream(
                 stream.with_type(ByteStreamType::String),
-                metadata,
+                metadata.clone(),
             ))
         } else {
             Err(ShellError::CantConvert {

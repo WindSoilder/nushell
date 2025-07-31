@@ -142,7 +142,7 @@ fn from_csv(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let name = call.head;
-    if let PipelineDataBody::Value(Value::List { .. }, _) = input {
+    if let PipelineDataBody::Value(Value::List { .. }, _) = input.get_body() {
         return Err(ShellError::TypeMismatch {
             err_message: "received list stream, did you forget to open file with --raw flag?"
                 .into(),

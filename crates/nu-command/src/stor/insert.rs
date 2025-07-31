@@ -104,7 +104,7 @@ fn handle(
 ) -> Result<Vec<Record>, ShellError> {
     // Check for conflicting use of both pipeline input and flag
     if let Some(record) = data_record {
-        if !matches!(input, PipelineDataBody::Empty) {
+        if !matches!(input.get_body(), PipelineDataBody::Empty) {
             return Err(ShellError::GenericError {
                 error: "Pipeline and Flag both being used".into(),
                 msg: "Use either pipeline input or '--data-record' parameter".into(),

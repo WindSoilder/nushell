@@ -237,9 +237,13 @@ fn into_record(call: &Call, input: PipelineData) -> Result<PipelineData, ShellEr
             }
             Ok(Value::record(record, span).into_pipeline_data_with_metadata(metadata))
         }
-        PipelineDataBody::Value(Value::Record { val, .. }, _) => {
-            Ok(PipelineData::value(Value::Record { val, internal_span: span }, metadata))
-        }
+        PipelineDataBody::Value(Value::Record { val, .. }, _) => Ok(PipelineData::value(
+            Value::Record {
+                val,
+                internal_span: span,
+            },
+            metadata,
+        )),
         PipelineDataBody::Value(Value::Error { error, .. }, _) => Err(*error),
         _ => Err(ShellError::TypeMismatch {
             err_message: format!("Can't convert {} to record", pipeline_type),

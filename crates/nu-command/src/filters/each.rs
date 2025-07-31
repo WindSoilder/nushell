@@ -133,7 +133,7 @@ with 'transpose' first."#
                                 _ => Some(data.into_value(head).unwrap_or_else(|err| {
                                     Value::error(chain_error_with_input(err, is_error, span), span)
                                 })),
-                            }
+                            },
                             Err(error) => {
                                 let error = chain_error_with_input(error, is_error, span);
                                 Some(Value::error(error, span))

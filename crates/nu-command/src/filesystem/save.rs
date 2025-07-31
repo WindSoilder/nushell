@@ -216,7 +216,10 @@ impl Command for Save {
             input => {
                 // It's not necessary to check if we are saving to the same file if this is a
                 // collected value, and not a stream
-                if !matches!(input, PipelineDataBody::Value(..) | PipelineDataBody::Empty) {
+                if !matches!(
+                    input.get_body(),
+                    PipelineDataBody::Value(..) | PipelineDataBody::Empty
+                ) {
                     check_saving_to_source_file(
                         input.metadata().as_ref(),
                         &path,

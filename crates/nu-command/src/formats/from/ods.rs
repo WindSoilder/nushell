@@ -83,7 +83,7 @@ fn convert_columns(columns: &[Value]) -> Result<Vec<String>, ShellError> {
 }
 
 fn collect_binary(input: PipelineData, span: Span) -> Result<Vec<u8>, ShellError> {
-    if let PipelineDataBody::ByteStream(stream, ..) = input {
+    if let PipelineDataBody::ByteStream(stream, ..) = input.get_body() {
         stream.into_bytes()
     } else {
         let mut bytes = vec![];
