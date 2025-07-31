@@ -51,7 +51,7 @@ impl Command for ToText {
         let serialize_types = call.has_flag(engine_state, stack, "serialize")?;
         let input = input.try_expand_range()?;
 
-        match input {
+        match input.body() {
             PipelineDataBody::Empty => Ok(Value::string(String::new(), head)
                 .into_pipeline_data_with_metadata(update_metadata(None))),
             PipelineDataBody::Value(value, ..) => {

@@ -106,7 +106,7 @@ pub fn to_delimited_data(
 
     // Check to ensure the input is likely one of our supported types first. We can't check a stream
     // without consuming it though
-    match input {
+    match input.body() {
         PipelineDataBody::Value(Value::List { .. } | Value::Record { .. }, _) => (),
         PipelineDataBody::Value(Value::Error { error, .. }, _) => return Err(*error),
         PipelineDataBody::Value(other, _) => {

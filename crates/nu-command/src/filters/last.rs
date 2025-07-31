@@ -93,7 +93,7 @@ impl Command for Last {
             return Ok(Value::list(Vec::new(), head).into_pipeline_data_with_metadata(metadata));
         }
 
-        match input {
+        match input.body() {
             PipelineDataBody::ListStream(_, _) | PipelineDataBody::Value(Value::Range { .. }, _) => {
                 let iterator = input.into_iter_strict(head)?;
 

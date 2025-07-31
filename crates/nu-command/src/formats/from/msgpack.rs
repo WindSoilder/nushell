@@ -115,7 +115,7 @@ MessagePack: https://msgpack.org/
             signals: engine_state.signals().clone(),
         };
         let metadata = input.metadata().map(|md| md.with_content_type(None));
-        let out = match input {
+        let out = match input.body() {
             // Deserialize from a byte buffer
             PipelineDataBody::Value(Value::Binary { val: bytes, .. }, _) => {
                 read_msgpack(Cursor::new(bytes), opts)

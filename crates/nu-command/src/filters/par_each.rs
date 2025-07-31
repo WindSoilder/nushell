@@ -129,7 +129,7 @@ impl Command for ParEach {
             vec.into_iter().map(|(_, val)| val)
         };
 
-        match input {
+        match input.body() {
             PipelineDataBody::Empty => Ok(PipelineData::empty()),
             PipelineDataBody::Value(value, ..) => {
                 let span = value.span();

@@ -45,7 +45,7 @@ impl Command for FromMsgpackz {
             signals: engine_state.signals().clone(),
         };
         let metadata = input.metadata().map(|md| md.with_content_type(None));
-        let out = match input {
+        let out = match input.body() {
             // Deserialize from a byte buffer
             PipelineDataBody::Value(Value::Binary { val: bytes, .. }, _) => {
                 let reader = brotli::Decompressor::new(Cursor::new(bytes), BUFFER_SIZE);

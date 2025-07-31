@@ -104,7 +104,7 @@ fn handle(
     update_record: Option<Record>,
     input: PipelineData,
 ) -> Result<Record, ShellError> {
-    match input {
+    match input.body() {
         PipelineDataBody::Empty => update_record.ok_or_else(|| ShellError::MissingParameter {
             param_name: "requires a record".into(),
             span,

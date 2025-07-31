@@ -67,7 +67,7 @@ impl Command for Length {
 
 fn length_row(call: &Call, input: PipelineData) -> Result<PipelineData, ShellError> {
     let span = input.span().unwrap_or(call.head);
-    match input {
+    match input.body() {
         PipelineDataBody::Empty | PipelineDataBody::Value(Value::Nothing { .. }, ..) => {
             Ok(Value::int(0, call.head).into_pipeline_data())
         }

@@ -56,7 +56,7 @@ impl Command for NuCheck {
 
         let input_span = input.span().unwrap_or(call.head);
 
-        match input {
+        match input.body() {
             PipelineDataBody::Value(Value::String { val, .. }, ..) => {
                 let contents = Vec::from(val);
                 if as_module {

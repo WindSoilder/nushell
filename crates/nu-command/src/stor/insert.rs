@@ -117,7 +117,7 @@ fn handle(
     }
 
     // Handle the input types
-    let values = match input {
+    let values = match input.body() {
         PipelineDataBody::Empty => {
             return Err(ShellError::MissingParameter {
                 param_name: "requires a table or a record".into(),

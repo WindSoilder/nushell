@@ -131,7 +131,7 @@ fn action(
     }: &Arguments,
     head: Span,
 ) -> Value {
-    match input {
+    match input.body() {
         Value::String { val: s, .. } => {
             let starts_with = if *case_insensitive {
                 s.to_folded_case().starts_with(&substring.to_folded_case())

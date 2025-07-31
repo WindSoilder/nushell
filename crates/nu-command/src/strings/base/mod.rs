@@ -49,7 +49,7 @@ pub fn encode(
 }
 
 fn get_string(input: PipelineData, call_span: Span) -> Result<(String, Span), ShellError> {
-    match input {
+    match input.body() {
         PipelineDataBody::Value(val, ..) => {
             let span = val.span();
             match val {
@@ -77,7 +77,7 @@ fn get_string(input: PipelineData, call_span: Span) -> Result<(String, Span), Sh
 }
 
 fn get_binary(input: PipelineData, call_span: Span) -> Result<(Vec<u8>, Span), ShellError> {
-    match input {
+    match input.body() {
         PipelineDataBody::Value(val, ..) => {
             let span = val.span();
             match val {

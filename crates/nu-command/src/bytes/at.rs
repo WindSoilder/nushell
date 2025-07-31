@@ -74,19 +74,18 @@ impl Command for BytesAt {
         let cell_paths: Vec<CellPath> = call.rest(engine_state, stack, 1)?;
         let cell_paths = (!cell_paths.is_empty()).then_some(cell_paths);
 
-        let body = input.body();
-        match body {
+        match input.body() {
             PipelineDataBody::ByteStream(stream, metadata) => {
                 let stream = stream.slice(call.head, call.arguments_span(), range)?;
                 Ok(PipelineData::byte_stream(stream, metadata))
             }
-            _ => operate(
+            body => operate(
                 map_value,
                 Arguments { range, cell_paths },
                 PipelineData::from(body),
                 call.head,
                 engine_state.signals(),
-            )
+            ),
         }
     }
 

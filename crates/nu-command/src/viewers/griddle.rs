@@ -76,7 +76,7 @@ prints out the list properly."#
         let use_color: bool = color_param && config.use_ansi_coloring.get(engine_state);
         let cwd = engine_state.cwd(Some(stack))?;
 
-        match input {
+        match input.body() {
             PipelineDataBody::Value(Value::List { vals, .. }, ..) => {
                 // dbg!("value::list");
                 let data = convert_to_list(vals, config)?;

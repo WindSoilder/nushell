@@ -75,7 +75,7 @@ impl Command for FromJson {
         // TODO: turn this into a structured underline of the nu_json error
         if call.has_flag(engine_state, stack, "objects")? {
             // Return a stream of JSON values, one for each non-empty line
-            match input {
+            match input.body() {
                 PipelineDataBody::Value(Value::String { val, .. }, ..) => {
                     Ok(PipelineData::list_stream(
                         read_json_lines(

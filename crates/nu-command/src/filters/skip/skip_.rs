@@ -91,7 +91,7 @@ impl Command for Skip {
             None => 1,
         };
         let input_span = input.span().unwrap_or(call.head);
-        match input {
+        match input.body() {
             PipelineDataBody::ByteStream(stream, metadata) => {
                 if stream.type_().is_binary_coercible() {
                     let span = stream.span();

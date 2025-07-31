@@ -448,7 +448,7 @@ fn find_in_pipelinedata(
     let map_pattern = pattern.clone();
     let map_columns_to_search = columns_to_search.clone();
 
-    match input {
+    match input.body() {
         PipelineDataBody::Empty => Ok(PipelineData::empty()),
         PipelineDataBody::Value(_, _) => input
             .filter(
@@ -555,7 +555,7 @@ fn value_should_be_printed(
 
 fn split_string_if_multiline(input: PipelineData, head_span: Span) -> PipelineData {
     let span = input.span().unwrap_or(head_span);
-    match input {
+    match input.body() {
         PipelineDataBody::Value(Value::String { ref val, .. }, _) => {
             if val.contains('\n') {
                 Value::list(

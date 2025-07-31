@@ -113,7 +113,7 @@ fn update(
     let cell_path: CellPath = call.req(engine_state, stack, 0)?;
     let replacement: Value = call.req(engine_state, stack, 1)?;
 
-    match input {
+    match input.body() {
         PipelineDataBody::Value(mut value, metadata) => {
             if let Value::Closure { val, .. } = replacement {
                 match (cell_path.members.first(), &mut value) {

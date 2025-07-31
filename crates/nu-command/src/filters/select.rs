@@ -244,7 +244,7 @@ fn select(
         input
     };
 
-    match input {
+    match input.body() {
         PipelineDataBody::Value(v, metadata, ..) => {
             let span = v.span();
             match v {

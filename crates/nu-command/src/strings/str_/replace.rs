@@ -229,7 +229,7 @@ fn action(
     }: &Arguments,
     head: Span,
 ) -> Value {
-    match input {
+    match input.body() {
         Value::String { val, .. } => {
             let FindReplace(find_str, replace_str) = FindReplace(&find.item, &replace.item);
             if *no_regex {

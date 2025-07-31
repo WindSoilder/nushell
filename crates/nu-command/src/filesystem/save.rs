@@ -88,7 +88,7 @@ impl Command for Save {
             });
 
         let from_io_error = IoError::factory(span, path.item.as_path());
-        match input {
+        match input.body() {
             PipelineDataBody::ByteStream(stream, metadata) => {
                 check_saving_to_source_file(metadata.as_ref(), &path, stderr_path.as_ref())?;
 

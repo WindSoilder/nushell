@@ -167,7 +167,7 @@ fn action(
     }: &Arguments,
     head: Span,
 ) -> Value {
-    match input {
+    match input.body() {
         Value::String { val: s, .. } => {
             let (search_str, start_index) = if let Some(spanned_range) = range {
                 let range_span = spanned_range.span;

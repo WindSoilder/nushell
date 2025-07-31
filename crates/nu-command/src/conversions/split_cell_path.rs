@@ -47,7 +47,7 @@ impl Command for SplitCellPath {
         let head = call.head;
         let input_type = input.get_type();
 
-        let src_span = match input {
+        let src_span = match input.body() {
             // Early return on correct type and empty pipeline
             PipelineDataBody::Value(Value::CellPath { val, .. }, _) => {
                 return Ok(split_cell_path(val, head)?.into_pipeline_data());

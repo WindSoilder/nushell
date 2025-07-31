@@ -238,7 +238,7 @@ impl Command for External {
         // Configure stdin. We'll try connecting input to the child process
         // directly. If that's not possible, we'll set up a pipe and spawn a
         // thread to copy data into the child process.
-        let data_to_copy_into_stdin = match input {
+        let data_to_copy_into_stdin = match input.body() {
             PipelineDataBody::ByteStream(stream, metadata) => match stream.into_stdio() {
                 Ok(stdin) => {
                     command.stdin(stdin);

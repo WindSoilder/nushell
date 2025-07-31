@@ -28,7 +28,7 @@ pub fn empty(
             Ok(Value::bool(true, head).into_pipeline_data())
         }
     } else {
-        match input {
+        match input.body() {
             PipelineDataBody::Empty => Ok(PipelineData::empty()),
             PipelineDataBody::ByteStream(stream, ..) => {
                 let span = stream.span();

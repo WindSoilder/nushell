@@ -238,7 +238,7 @@ fn reject(
             .any(|member| matches!(member, PathMember::Int { .. }))
     });
 
-    match input {
+    match input.body() {
         PipelineDataBody::ListStream(stream, ..) if !has_integer_path_member => {
             let result = stream
                 .into_iter()

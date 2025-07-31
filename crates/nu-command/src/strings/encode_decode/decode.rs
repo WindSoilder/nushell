@@ -111,7 +111,7 @@ fn run(
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
 
-    match input {
+    match input.body() {
         PipelineDataBody::ByteStream(stream, ..) => {
             let span = stream.span();
             let bytes = stream.into_bytes()?;

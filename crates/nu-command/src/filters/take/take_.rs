@@ -49,7 +49,7 @@ impl Command for Take {
 
         let metadata = input.metadata();
 
-        match input {
+        match input.body() {
             PipelineDataBody::Value(val, _) => {
                 let span = val.span();
                 match val {

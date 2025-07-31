@@ -106,7 +106,7 @@ with 'transpose' first."#
         let keep_empty = call.has_flag(engine_state, stack, "keep-empty")?;
 
         let metadata = input.metadata();
-        match input {
+        match input.body() {
             PipelineDataBody::Empty => Ok(PipelineData::empty()),
             PipelineDataBody::Value(Value::Range { .. }, ..)
             | PipelineDataBody::Value(Value::List { .. }, ..)

@@ -128,7 +128,7 @@ fn into_binary(
     let cell_paths = call.rest(engine_state, stack, 0)?;
     let cell_paths = (!cell_paths.is_empty()).then_some(cell_paths);
 
-    let body = input.body();
+    let body = input;
     match body {
         PipelineDataBody::ByteStream(stream, metadata) => {
             // Just set the type - that should be good enough

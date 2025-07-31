@@ -30,7 +30,7 @@ impl Command for Lines {
         let skip_empty = call.has_flag(engine_state, stack, "skip-empty")?;
 
         let span = input.span().unwrap_or(call.head);
-        match input {
+        match input.body() {
             PipelineDataBody::Value(value, ..) => match value {
                 Value::String { val, .. } => {
                     let lines = if skip_empty {

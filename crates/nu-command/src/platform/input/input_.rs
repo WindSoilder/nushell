@@ -109,7 +109,7 @@ impl Command for Input {
             _ => "".to_string(),
         };
 
-        let history_entries = match input {
+        let history_entries = match input.body() {
             PipelineDataBody::Value(Value::List { vals, .. }, ..) => Some(vals),
             _ => None,
         };

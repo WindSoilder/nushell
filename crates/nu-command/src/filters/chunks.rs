@@ -120,7 +120,7 @@ pub fn chunks(
     span: Span,
 ) -> Result<PipelineData, ShellError> {
     let from_io_error = IoError::factory(span, None);
-    match input {
+    match input.body() {
         PipelineDataBody::Value(Value::List { vals, .. }, metadata) => {
             let chunks = ChunksIter::new(vals, chunk_size, span);
             let stream = ListStream::new(chunks, span, engine_state.signals().clone());

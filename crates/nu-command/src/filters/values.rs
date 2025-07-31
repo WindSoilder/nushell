@@ -137,7 +137,7 @@ fn values(
 ) -> Result<PipelineData, ShellError> {
     let signals = engine_state.signals().clone();
     let metadata = input.metadata();
-    match input {
+    match input.body() {
         PipelineDataBody::Empty => Ok(PipelineData::empty()),
         PipelineDataBody::Value(v, ..) => {
             let span = v.span();

@@ -194,7 +194,7 @@ fn operate(
         })
         .collect::<Vec<_>>();
 
-    match input {
+    match input.body() {
         PipelineDataBody::Empty => Ok(PipelineData::empty()),
         PipelineDataBody::Value(value, ..) => match value {
             Value::String { val, .. } => {

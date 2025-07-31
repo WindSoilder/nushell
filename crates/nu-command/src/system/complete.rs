@@ -32,7 +32,7 @@ impl Command for Complete {
         input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let head = call.head;
-        match input {
+        match input.body() {
             PipelineDataBody::ByteStream(stream, ..) => {
                 let Ok(child) = stream.into_child() else {
                     return Err(ShellError::GenericError {

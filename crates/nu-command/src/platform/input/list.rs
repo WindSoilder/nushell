@@ -83,7 +83,7 @@ impl Command for InputList {
         let display_path: Option<CellPath> = call.get_flag(engine_state, stack, "display")?;
         let config = stack.get_config(engine_state);
 
-        let options: Vec<Options> = match input {
+        let options: Vec<Options> = match input.body() {
             PipelineDataBody::Value(Value::Range { .. }, ..)
             | PipelineDataBody::Value(Value::List { .. }, ..)
             | PipelineDataBody::ListStream { .. } => input

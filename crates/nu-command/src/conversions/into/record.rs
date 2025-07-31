@@ -110,7 +110,8 @@ impl Command for IntoRecord {
 
 fn into_record(call: &Call, input: PipelineData) -> Result<PipelineData, ShellError> {
     let span = input.span().unwrap_or(call.head);
-    match input {
+    let metadata = input.metadata();
+    match input.body() {
         PipelineDataBody::Value(Value::Date { val, .. }, _) => {
             Ok(parse_date_into_record(val, span).into_pipeline_data())
         }
@@ -119,7 +120,6 @@ fn into_record(call: &Call, input: PipelineData) -> Result<PipelineData, ShellEr
         }
         PipelineDataBody::Value(Value::List { .. }, _) | PipelineDataBody::ListStream(..) => {
             let mut record = Record::new();
-            let metadata = input.metadata();
 
             enum ExpectedType {
                 Record,

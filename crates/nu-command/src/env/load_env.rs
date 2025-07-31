@@ -43,7 +43,7 @@ impl Command for LoadEnv {
 
         let record = match arg {
             Some(record) => record,
-            None => match input {
+            None => match input.body() {
                 PipelineDataBody::Value(Value::Record { val, .. }, ..) => val.into_owned(),
                 _ => {
                     return Err(ShellError::UnsupportedInput {
