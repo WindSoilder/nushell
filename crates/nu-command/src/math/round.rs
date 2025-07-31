@@ -51,7 +51,7 @@ impl Command for MathRound {
         let precision_param: Option<i64> = call.get_flag(engine_state, stack, "precision")?;
         let head = call.head;
         // This doesn't match explicit nulls
-        if matches!(input, PipelineDataBody::Empty) {
+        if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
         if let PipelineDataBody::Value(
@@ -60,7 +60,7 @@ impl Command for MathRound {
                 internal_span,
             },
             ..,
-        ) = input
+        ) = input.get_body()
         {
             ensure_bounded(val.as_ref(), internal_span, head)?;
         }
@@ -79,7 +79,7 @@ impl Command for MathRound {
         let precision_param: Option<i64> = call.get_flag_const(working_set, "precision")?;
         let head = call.head;
         // This doesn't match explicit nulls
-        if matches!(input, PipelineDataBody::Empty) {
+        if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
         if let PipelineDataBody::Value(
@@ -88,7 +88,7 @@ impl Command for MathRound {
                 internal_span,
             },
             ..,
-        ) = input
+        ) = input.get_body()
         {
             ensure_bounded(val.as_ref(), internal_span, head)?;
         }

@@ -2,7 +2,7 @@ use nu_engine::{command_prelude::*, get_eval_block_with_early_return, redirect_e
 #[cfg(feature = "os")]
 use nu_protocol::process::{ChildPipe, ChildProcess};
 use nu_protocol::{
-    ByteStream, ByteStreamSource, OutDest, engine::Closure, shell_error::io::IoError,
+    ByteStream, ByteStreamSource, OutDest, PipelineDataBody, engine::Closure, shell_error::io::IoError,
 };
 
 use std::{
@@ -78,7 +78,10 @@ impl Command for Do {
         }
 
         match result {
-            Ok(PipelineDataBody::ByteStream(stream, metadata)) if capture_errors => {
+            Ok(data) => {
+                let body = data.body();
+                match body {
+                    PipelineDataBody::ByteStream(stream, metadata) if capture_errors => {
                 let span = stream.span();
                 #[cfg(not(feature = "os"))]
                 return Err(ShellError::DisabledOsSupport {
@@ -164,33 +167,35 @@ impl Command for Do {
                     }
                     Err(stream) => Ok(PipelineData::byte_stream(stream, metadata)),
                 }
-            }
-            Ok(PipelineDataBody::ByteStream(mut stream, metadata))
-                if ignore_all_errors
-                    && !matches!(
-                        caller_stack.stdout(),
-                        OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value
-                    ) =>
-            {
+                    }
+                    PipelineDataBody::ByteStream(mut stream, metadata)
+                        if ignore_all_errors
+                            && !matches!(
+                                caller_stack.stdout(),
+                                OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value
+                            ) =>
+                    {
                 #[cfg(feature = "os")]
                 if let ByteStreamSource::Child(child) = stream.source_mut() {
                     child.ignore_error(true);
-                }
-                Ok(PipelineData::byte_stream(stream, metadata))
-            }
-            Ok(PipelineDataBody::Value(Value::Error { .. }, ..)) | Err(_) if ignore_all_errors => {
-                Ok(PipelineData::empty())
-            }
-            Ok(PipelineDataBody::ListStream(stream, metadata)) if ignore_all_errors => {
-                let stream = stream.map(move |value| {
-                    if let Value::Error { .. } = value {
-                        Value::nothing(head)
-                    } else {
-                        value
                     }
-                });
-                Ok(PipelineData::list_stream(stream, metadata))
-            }
+                    PipelineDataBody::Value(Value::Error { .. }, ..) if ignore_all_errors => {
+                        Ok(PipelineData::empty())
+                    }
+                    PipelineDataBody::ListStream(stream, metadata) if ignore_all_errors => {
+                        let stream = stream.map(move |value| {
+                            if let Value::Error { .. } = value {
+                                Value::nothing(head)
+                            } else {
+                                value
+                            }
+                        });
+                        Ok(PipelineData::list_stream(stream, metadata))
+                    }
+                    _ => Ok(PipelineData::from(body)),
+                }
+            },
+            Err(err) if ignore_all_errors => Ok(PipelineData::empty()),
             r => r,
         }
     }

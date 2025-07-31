@@ -119,7 +119,7 @@ use it in your pipeline."#
             .try_into_stream(engine_state)
             .unwrap_or_else(|original_input| original_input);
 
-        if let PipelineDataBody::ByteStream(stream, metadata) = input {
+        if let PipelineDataBody::ByteStream(stream, metadata) = input.body() {
             let type_ = stream.type_();
 
             let info = StreamInfo {
@@ -255,7 +255,7 @@ use it in your pipeline."#
             let metadata = input.metadata();
             let metadata_clone = metadata.clone();
 
-            if matches!(input, PipelineDataBody::ListStream(..)) {
+            if matches!(input.get_body(), PipelineDataBody::ListStream(..)) {
                 // Only use the iterator implementation on lists / list streams. We want to be able
                 // to preserve errors as much as possible, and only the stream implementations can
                 // really do that

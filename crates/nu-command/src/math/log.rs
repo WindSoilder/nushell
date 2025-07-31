@@ -56,7 +56,7 @@ impl Command for MathLog {
                 internal_span,
             },
             ..,
-        ) = input
+        ) = input.get_body()
         {
             ensure_bounded(val.as_ref(), internal_span, head)?;
         }
@@ -77,7 +77,7 @@ impl Command for MathLog {
                 internal_span,
             },
             ..,
-        ) = input
+        ) = input.get_body()
         {
             ensure_bounded(val.as_ref(), internal_span, head)?;
         }
@@ -122,7 +122,7 @@ fn log(
         });
     }
     // This doesn't match explicit nulls
-    if matches!(input, PipelineDataBody::Empty) {
+    if input.is_nothing() {
         return Err(ShellError::PipelineEmpty { dst_span: head });
     }
     let base = base.item;
