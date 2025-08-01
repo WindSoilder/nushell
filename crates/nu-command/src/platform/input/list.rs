@@ -115,7 +115,8 @@ impl Command for InputList {
                 })
                 .collect::<Result<Vec<_>, ShellError>>()?,
             PipelineDataBody::ListStream(stream, ..) => stream
-                .map(move |val| {
+                .into_iter()
+                .map(move |val: Value| -> Result<Options, ShellError> {
                     let display_value = if let Some(ref cellpath) = display_path {
                         val.follow_cell_path(&cellpath.members)?
                             .to_expanded_string(", ", &config)

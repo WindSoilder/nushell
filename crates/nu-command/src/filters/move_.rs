@@ -150,7 +150,7 @@ impl Command for Move {
 
         let metadata = input.metadata();
 
-        match input.body() {
+        match input.get_body() {
             PipelineDataBody::Value(Value::List { .. }, ..)
             | PipelineDataBody::ListStream { .. } => {
                 let res = input.into_iter().map(move |x| match x.as_record() {

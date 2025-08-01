@@ -448,11 +448,8 @@ fn find_in_pipelinedata(
     let map_pattern = pattern.clone();
     let map_columns_to_search = columns_to_search.clone();
 
-    if matches!(input.get_body(), PipelineDataBody::Empty) {
-        return Ok(PipelineData::empty());
-    }
-
     match input.body() {
+        PipelineDataBody::Empty => Ok(PipelineData::empty()),
         PipelineDataBody::Value(value, metadata) => {
             let reconstructed_input = PipelineData::value(value, metadata);
             reconstructed_input

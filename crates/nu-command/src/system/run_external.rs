@@ -492,7 +492,7 @@ fn write_pipeline_data(
                 stream.write_to(writer)?;
             }
         }
-        PipelineDataBody::Value(Value::Binary { ref val, .. }, ..) => {
+        PipelineDataBody::Value(Value::Binary { val, .. }, ..) => {
             writer.write_all(val).map_err(|err| {
                 IoError::new_internal(
                     err,

@@ -166,36 +166,35 @@ fn string_helper(
     let cell_paths = call.rest(engine_state, stack, 0)?;
     let cell_paths = (!cell_paths.is_empty()).then_some(cell_paths);
 
-    if let PipelineDataBody::ByteStream(stream, metadata) = input.get_body() {
-        // Just set the type - that should be good enough. There is no guarantee that the data
-        // within a string stream is actually valid UTF-8. But refuse to do it if it was already set
-        // to binary
-        if stream.type_().is_string_coercible() {
-            let stream = match input.body() {
-                PipelineDataBody::ByteStream(stream, _) => stream,
-                _ => unreachable!(),
-            };
-            Ok(PipelineData::byte_stream(
-                stream.with_type(ByteStreamType::String),
-                metadata.clone(),
-            ))
-        } else {
-            Err(ShellError::CantConvert {
-                to_type: "string".into(),
-                from_type: "binary".into(),
-                span: stream.span(),
-                help: Some("try using the `decode` command".into()),
-            })
+    match input.body() {
+        PipelineDataBody::ByteStream(stream, metadata) => {
+            // Just set the type - that should be good enough. There is no guarantee that the data
+            // within a string stream is actually valid UTF-8. But refuse to do it if it was already set
+            // to binary
+            if stream.type_().is_string_coercible() {
+                Ok(PipelineData::byte_stream(
+                    stream.with_type(ByteStreamType::String),
+                    metadata,
+                ))
+            } else {
+                Err(ShellError::CantConvert {
+                    to_type: "string".into(),
+                    from_type: "binary".into(),
+                    span: stream.span(),
+                    help: Some("try using the `decode` command".into()),
+                })
+            }
         }
-    } else {
-        let config = stack.get_config(engine_state);
-        let args = Arguments {
-            decimals_value,
-            cell_paths,
-            config,
-            group_digits,
-        };
-        operate(action, args, input, head, engine_state.signals())
+        other => {
+            let config = stack.get_config(engine_state);
+            let args = Arguments {
+                decimals_value,
+                cell_paths,
+                config,
+                group_digits,
+            };
+            operate(action, args, other.into(), head, engine_state.signals())
+        }
     }
 }
 

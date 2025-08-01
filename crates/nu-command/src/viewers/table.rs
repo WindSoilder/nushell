@@ -422,20 +422,16 @@ impl<'a> CmdInput<'a> {
 fn handle_table_command(mut input: CmdInput<'_>) -> ShellResult<PipelineData> {
     let span = input.data.span().unwrap_or(input.call.head);
     
-    // Handle ByteStream cases first since they might need early return
-    if let PipelineDataBody::ByteStream(ref stream, _) = input.data.get_body() {
-        if stream.type_() == ByteStreamType::Binary {
-            // Extract and consume the data for binary stream case
-            if let PipelineDataBody::ByteStream(stream, _) = input.data.body() {
-                return Ok(PipelineData::byte_stream(pretty_hex_stream(stream, input.call.head), None));
-            }
-        } else {
-            // For non-binary ByteStream, just return the data as-is
-            return Ok(input.data);
-        }
-    }
-    
+    // Handle different pipeline data types
     match input.data.body() {
+        PipelineDataBody::ByteStream(stream, _) => {
+            if stream.type_() == ByteStreamType::Binary {
+                return Ok(PipelineData::byte_stream(pretty_hex_stream(stream, input.call.head), None));
+            } else {
+                // For non-binary ByteStream, recreate PipelineData
+                return Ok(PipelineData::byte_stream(stream, None));
+            }
+        }
         PipelineDataBody::Value(Value::Binary { val, .. }, ..) => {
             let signals = input.engine_state.signals().clone();
             let stream = ByteStream::read_binary(val, input.call.head, signals);

@@ -43,17 +43,20 @@ impl Command for LoadEnv {
 
         let record = match arg {
             Some(record) => record,
-            None => match input.body() {
-                PipelineDataBody::Value(Value::Record { val, .. }, ..) => val.into_owned(),
-                _ => {
-                    return Err(ShellError::UnsupportedInput {
-                        msg: "'load-env' expects a single record".into(),
-                        input: "value originated from here".into(),
-                        msg_span: span,
-                        input_span: input.span().unwrap_or(span),
-                    });
+            None => {
+                let input_span = input.span().unwrap_or(span);
+                match input.body() {
+                    PipelineDataBody::Value(Value::Record { val, .. }, ..) => val.into_owned(),
+                    _ => {
+                        return Err(ShellError::UnsupportedInput {
+                            msg: "'load-env' expects a single record".into(),
+                            input: "value originated from here".into(),
+                            msg_span: span,
+                            input_span,
+                        });
+                    }
                 }
-            },
+            }
         };
 
         for prohibited in ["FILE_PWD", "CURRENT_FILE", "PWD"] {

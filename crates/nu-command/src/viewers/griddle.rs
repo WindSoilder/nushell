@@ -136,7 +136,7 @@ prints out the list properly."#
             x => {
                 // dbg!("other value");
                 // dbg!(x.get_type());
-                Ok(x)
+                Ok(x.into())
             }
         }
     }

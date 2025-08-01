@@ -79,7 +79,7 @@ impl Command for BytesSplit {
                 md,
             ),
             PipelineDataBody::ByteStream(stream, md) => (stream.split(separator), md),
-            body => {
+            _body => {
                 let span = head; // Use head span as fallback
                 return Err(ShellError::UnsupportedInput {
                     msg: "Input data is not supported by this command".into(),

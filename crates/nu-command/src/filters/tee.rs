@@ -120,7 +120,8 @@ use it in your pipeline."#
             .unwrap_or_else(|original_input| original_input);
 
         let input_metadata = input.metadata();
-        if let PipelineDataBody::ByteStream(stream, metadata) = input.body() {
+        match input.body() {
+            PipelineDataBody::ByteStream(stream, metadata) => {
             let type_ = stream.type_();
 
             let info = StreamInfo {
@@ -248,41 +249,45 @@ use it in your pipeline."#
                     }
                 }
             }
-        } else {
-            if use_stderr {
-                return stderr_misuse(input.span().unwrap_or(head), head);
-            }
+            other_body => {
+                if use_stderr {
+                    return stderr_misuse(span, head);
+                }
 
-            let metadata = input_metadata;
-            let metadata_clone = metadata.clone();
+                let metadata = input_metadata;
+                let metadata_clone = metadata.clone();
+                
+                // Convert body back to PipelineData for processing
+                let input_reconstructed = other_body.into();
 
-            if matches!(input.get_body(), PipelineDataBody::ListStream(..)) {
-                // Only use the iterator implementation on lists / list streams. We want to be able
-                // to preserve errors as much as possible, and only the stream implementations can
-                // really do that
-                let signals = engine_state.signals().clone();
+                if matches!(other_body, PipelineDataBody::ListStream(..)) {
+                    // Only use the iterator implementation on lists / list streams. We want to be able
+                    // to preserve errors as much as possible, and only the stream implementations can
+                    // really do that
+                    let signals = engine_state.signals().clone();
 
-                Ok(tee(input.into_iter(), move |rx| {
-                    let input = rx.into_pipeline_data_with_metadata(span, signals, metadata_clone);
-                    eval_block(input)
-                })
-                .map_err(&from_io_error)?
-                .map(move |result| result.unwrap_or_else(|err| Value::error(err, closure_span)))
-                .into_pipeline_data_with_metadata(
-                    span,
-                    engine_state.signals().clone(),
-                    metadata,
-                ))
-            } else {
+                    Ok(tee(input_reconstructed.into_iter(), move |rx| {
+                        let input = rx.into_pipeline_data_with_metadata(span, signals, metadata_clone);
+                        eval_block(input)
+                    })
+                    .map_err(&from_io_error)?
+                    .map(move |result| result.unwrap_or_else(|err| Value::error(err, closure_span)))
+                    .into_pipeline_data_with_metadata(
+                        span,
+                        engine_state.signals().clone(),
+                        metadata,
+                    ))
+                } else {
                 // Otherwise, we can spawn a thread with the input value, but we have nowhere to
                 // send an error to other than just trying to print it to stderr.
-                let value = input.into_value(span)?;
+                let value = input_reconstructed.into_value(span)?;
                 let value_clone = value.clone();
-                tee_once(engine_state_arc, move || {
-                    eval_block(value_clone.into_pipeline_data_with_metadata(metadata_clone))
-                })
-                .map_err(&from_io_error)?;
-                Ok(value.into_pipeline_data_with_metadata(metadata))
+                    tee_once(engine_state_arc, move || {
+                        eval_block(value_clone.into_pipeline_data_with_metadata(metadata_clone))
+                    })
+                    .map_err(&from_io_error)?;
+                    Ok(value.into_pipeline_data_with_metadata(metadata))
+                }
             }
         }
     }

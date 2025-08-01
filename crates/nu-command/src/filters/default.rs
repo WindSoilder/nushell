@@ -214,7 +214,7 @@ fn default(
     // or an empty string, list, or record when --empty is passed
     } else if input.is_nothing()
         || (default_when_empty
-            && matches!(input.get_body(), PipelineDataBody::Value(ref value, _) if value.is_empty()))
+            && matches!(input.get_body(), PipelineDataBody::Value(value, _) if value.is_empty()))
     {
         default_value.single_run_pipeline_data()
     } else if default_when_empty && matches!(input.get_body(), PipelineDataBody::ListStream(..)) {

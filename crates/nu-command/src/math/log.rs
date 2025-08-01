@@ -53,13 +53,13 @@ impl Command for MathLog {
         let base: Spanned<f64> = call.req(engine_state, stack, 0)?;
         if let PipelineDataBody::Value(
             Value::Range {
-                ref val,
+                val,
                 internal_span,
             },
             ..,
         ) = input.get_body()
         {
-            ensure_bounded(val.as_ref(), *internal_span, head)?;
+            ensure_bounded(val, *internal_span, head)?;
         }
         log(base, call.head, input, engine_state.signals())
     }
@@ -74,13 +74,13 @@ impl Command for MathLog {
         let base: Spanned<f64> = call.req_const(working_set, 0)?;
         if let PipelineDataBody::Value(
             Value::Range {
-                ref val,
+                val,
                 internal_span,
             },
             ..,
         ) = input.get_body()
         {
-            ensure_bounded(val.as_ref(), *internal_span, head)?;
+            ensure_bounded(val, *internal_span, head)?;
         }
         log(base, call.head, input, working_set.permanent().signals())
     }
