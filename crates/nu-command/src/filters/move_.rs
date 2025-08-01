@@ -171,10 +171,16 @@ impl Command for Move {
                 Ok(move_record_columns(&val, &columns, &location, head)?.into_pipeline_data())
             }
             other => {
-                let pipeline_data: PipelineData = other.into();
+                // Create pipeline data from the original input since we can't convert from reference
+                let input_type = match other {
+                    PipelineDataBody::Empty => "null".to_string(),
+                    PipelineDataBody::Value(val, _) => val.get_type().to_string(),
+                    PipelineDataBody::ListStream(_, _) => "list".to_string(),
+                    PipelineDataBody::ByteStream(_, _) => "binary".to_string(),
+                };
                 Err(ShellError::OnlySupportsThisInputType {
                     exp_input_type: "record or table".to_string(),
-                    wrong_type: pipeline_data.get_type().to_string(),
+                    wrong_type: input_type,
                     dst_span: head,
                     src_span: Span::new(head.start, head.start),
                 })

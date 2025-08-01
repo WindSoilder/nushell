@@ -249,6 +249,7 @@ use it in your pipeline."#
                     }
                 }
             }
+            }
             other_body => {
                 if use_stderr {
                     return stderr_misuse(span, head);
@@ -257,10 +258,13 @@ use it in your pipeline."#
                 let metadata = input_metadata;
                 let metadata_clone = metadata.clone();
                 
+                // Check type before consuming
+                let is_list_stream = matches!(other_body, PipelineDataBody::ListStream(..));
+                
                 // Convert body back to PipelineData for processing
-                let input_reconstructed = other_body.into();
+                let input_reconstructed: PipelineData = other_body.into();
 
-                if matches!(other_body, PipelineDataBody::ListStream(..)) {
+                if is_list_stream {
                     // Only use the iterator implementation on lists / list streams. We want to be able
                     // to preserve errors as much as possible, and only the stream implementations can
                     // really do that
