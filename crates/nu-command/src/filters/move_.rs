@@ -168,7 +168,7 @@ impl Command for Move {
                 ))
             }
             PipelineDataBody::Value(Value::Record { val, .. }, ..) => {
-                Ok(move_record_columns(&val, &columns, &location, head)?.into_pipeline_data())
+                Ok(move_record_columns(val, &columns, &location, head)?.into_pipeline_data())
             }
             other => {
                 // Create pipeline data from the original input since we can't convert from reference

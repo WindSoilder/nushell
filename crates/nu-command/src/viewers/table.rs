@@ -426,13 +426,13 @@ fn handle_table_command(mut input: CmdInput<'_>) -> ShellResult<PipelineData> {
     match input.data.body() {
         PipelineDataBody::ByteStream(stream, _) => {
             if stream.type_() == ByteStreamType::Binary {
-                return Ok(PipelineData::byte_stream(
+                Ok(PipelineData::byte_stream(
                     pretty_hex_stream(stream, input.call.head),
                     None,
-                ));
+                ))
             } else {
                 // For non-binary ByteStream, recreate PipelineData
-                return Ok(PipelineData::byte_stream(stream, None));
+                Ok(PipelineData::byte_stream(stream, None))
             }
         }
         PipelineDataBody::Value(Value::Binary { val, .. }, ..) => {

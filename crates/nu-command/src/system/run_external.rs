@@ -566,16 +566,15 @@ pub fn command_not_found(
         stack.remove_env_var(engine_state, canary);
 
         match output {
-            Ok(data) => match data.body() {
-                PipelineDataBody::Value(Value::String { val, .. }, ..) => {
+            Ok(data) => {
+                if let PipelineDataBody::Value(Value::String { val, .. }, ..) = data.body() {
                     return ShellError::ExternalCommand {
                         label: format!("Command `{name}` not found"),
                         help: val,
                         span,
                     };
                 }
-                _ => {}
-            },
+            }
             Err(err) => {
                 return err;
             }

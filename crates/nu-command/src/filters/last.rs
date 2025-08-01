@@ -160,7 +160,7 @@ impl Command for Last {
                     }),
                 }
             }
-            PipelineDataBody::ByteStream(_, ..) => {
+            PipelineDataBody::ByteStream(..) => {
                 // Need to consume the input to get the stream
                 if let PipelineDataBody::ByteStream(stream, ..) = input.body() {
                     if stream.type_().is_binary_coercible() {
