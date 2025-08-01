@@ -255,7 +255,7 @@ impl Command for External {
             }
             value => {
                 command.stdin(Stdio::piped());
-                Some(value)
+                Some(value.into())
             }
         };
 
@@ -486,36 +486,42 @@ fn write_pipeline_data(
     data: PipelineData,
     mut writer: impl Write,
 ) -> Result<(), ShellError> {
-    if let PipelineDataBody::ByteStream(stream, ..) = data {
-        stream.write_to(writer)?;
-    } else if let PipelineDataBody::Value(Value::Binary { val, .. }, ..) = data {
-        writer.write_all(&val).map_err(|err| {
-            IoError::new_internal(
-                err,
-                "Could not write pipeline data",
-                nu_protocol::location!(),
-            )
-        })?;
-    } else {
-        stack.start_collect_value();
-
-        // Turn off color as we pass data through
-        Arc::make_mut(&mut engine_state.config).use_ansi_coloring = UseAnsiColoring::False;
-
-        // Invoke the `table` command.
-        let output =
-            crate::Table.run(&engine_state, &mut stack, &Call::new(Span::unknown()), data)?;
-
-        // Write the output.
-        for value in output {
-            let bytes = value.coerce_into_binary()?;
-            writer.write_all(&bytes).map_err(|err| {
+    match data.get_body() {
+        PipelineDataBody::ByteStream(..) => {
+            if let PipelineDataBody::ByteStream(stream, ..) = data.body() {
+                stream.write_to(writer)?;
+            }
+        }
+        PipelineDataBody::Value(Value::Binary { ref val, .. }, ..) => {
+            writer.write_all(val).map_err(|err| {
                 IoError::new_internal(
                     err,
                     "Could not write pipeline data",
                     nu_protocol::location!(),
                 )
             })?;
+        }
+        _ => {
+            stack.start_collect_value();
+
+            // Turn off color as we pass data through
+            Arc::make_mut(&mut engine_state.config).use_ansi_coloring = UseAnsiColoring::False;
+
+            // Invoke the `table` command.
+            let output =
+                crate::Table.run(&engine_state, &mut stack, &Call::new(Span::unknown()), data)?;
+
+            // Write the output.
+            for value in output {
+                let bytes = value.coerce_into_binary()?;
+                writer.write_all(&bytes).map_err(|err| {
+                    IoError::new_internal(
+                        err,
+                        "Could not write pipeline data",
+                        nu_protocol::location!(),
+                    )
+                })?;
+            }
         }
     }
     Ok(())
@@ -560,18 +566,18 @@ pub fn command_not_found(
         stack.remove_env_var(engine_state, canary);
 
         match output {
-            Ok(PipelineDataBody::Value(Value::String { val, .. }, ..)) => {
-                return ShellError::ExternalCommand {
-                    label: format!("Command `{name}` not found"),
-                    help: val,
-                    span,
-                };
-            }
+            Ok(data) => match data.body() {
+                PipelineDataBody::Value(Value::String { val, .. }, ..) => {
+                    return ShellError::ExternalCommand {
+                        label: format!("Command `{name}` not found"),
+                        help: val,
+                        span,
+                    };
+                }
+                _ => {}
+            },
             Err(err) => {
                 return err;
-            }
-            _ => {
-                // The hook did not return a string, so ignore it.
             }
         }
     }

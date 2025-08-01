@@ -102,6 +102,7 @@ In this case, generation also stops when the input stream stops."#
         let block = engine_state.get_block(closure.block_id);
         let mut closure = ClosureEval::new(engine_state, stack, closure);
 
+        let input_span = input.span().unwrap_or(head);
         match input.body() {
             PipelineDataBody::Empty => {
                 // A type of Option<S> is used to represent state. Invocation
@@ -149,7 +150,7 @@ In this case, generation also stops when the input stream stops."#
             _ => Err(ShellError::PipelineMismatch {
                 exp_input_type: "nothing".to_string(),
                 dst_span: head,
-                src_span: input.span().unwrap_or(head),
+                src_span: input_span,
             }),
         }
     }

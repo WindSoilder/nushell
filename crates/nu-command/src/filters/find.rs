@@ -448,20 +448,26 @@ fn find_in_pipelinedata(
     let map_pattern = pattern.clone();
     let map_columns_to_search = columns_to_search.clone();
 
+    if matches!(input.get_body(), PipelineDataBody::Empty) {
+        return Ok(PipelineData::empty());
+    }
+
     match input.body() {
-        PipelineDataBody::Empty => Ok(PipelineData::empty()),
-        PipelineDataBody::Value(_, _) => input
-            .filter(
-                move |value| {
-                    value_should_be_printed(&pattern, value, &columns_to_search, &config)
-                        != pattern.invert
-                },
-                engine_state.signals(),
-            )?
-            .map(
-                move |x| highlight_matches_in_value(&map_pattern, x, &map_columns_to_search),
-                engine_state.signals(),
-            ),
+        PipelineDataBody::Value(value, metadata) => {
+            let reconstructed_input = PipelineData::value(value, metadata);
+            reconstructed_input
+                .filter(
+                    move |value| {
+                        value_should_be_printed(&pattern, value, &columns_to_search, &config)
+                            != pattern.invert
+                    },
+                    engine_state.signals(),
+                )?
+                .map(
+                    move |x| highlight_matches_in_value(&map_pattern, x, &map_columns_to_search),
+                    engine_state.signals(),
+                )
+        }
         PipelineDataBody::ListStream(stream, metadata) => {
             let stream = stream.modify(|iter| {
                 iter.filter(move |value| {

@@ -59,7 +59,7 @@ impl Command for MathLog {
             ..,
         ) = input.get_body()
         {
-            ensure_bounded(val.as_ref(), internal_span, head)?;
+            ensure_bounded(val.as_ref(), *internal_span, head)?;
         }
         log(base, call.head, input, engine_state.signals())
     }
@@ -80,7 +80,7 @@ impl Command for MathLog {
             ..,
         ) = input.get_body()
         {
-            ensure_bounded(val.as_ref(), internal_span, head)?;
+            ensure_bounded(val.as_ref(), *internal_span, head)?;
         }
         log(base, call.head, input, working_set.permanent().signals())
     }

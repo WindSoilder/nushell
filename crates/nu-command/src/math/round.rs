@@ -63,7 +63,7 @@ impl Command for MathRound {
             ..,
         ) = input.get_body()
         {
-            ensure_bounded(val.as_ref(), internal_span, head)?;
+            ensure_bounded(val.as_ref(), *internal_span, head)?;
         }
         input.map(
             move |value| operate(value, head, precision_param),
@@ -91,7 +91,7 @@ impl Command for MathRound {
             ..,
         ) = input.get_body()
         {
-            ensure_bounded(val.as_ref(), internal_span, head)?;
+            ensure_bounded(val.as_ref(), *internal_span, head)?;
         }
         input.map(
             move |value| operate(value, head, precision_param),

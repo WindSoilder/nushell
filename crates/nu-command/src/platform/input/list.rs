@@ -84,8 +84,8 @@ impl Command for InputList {
         let config = stack.get_config(engine_state);
 
         let options: Vec<Options> = match input.body() {
-            PipelineDataBody::Value(Value::Range { val, .. }, ..) => val
-                .into_iter()
+            PipelineDataBody::Value(Value::Range { val, .. }, ..) => (*val)
+                .into_range_iter(head, engine_state.signals().clone())
                 .map(move |val| {
                     let display_value = if let Some(ref cellpath) = display_path {
                         val.follow_cell_path(&cellpath.members)?
@@ -114,7 +114,7 @@ impl Command for InputList {
                     })
                 })
                 .collect::<Result<Vec<_>, ShellError>>()?,
-            PipelineDataBody::ListStream { stream, .. } => stream
+            PipelineDataBody::ListStream(stream, ..) => stream
                 .map(move |val| {
                     let display_value = if let Some(ref cellpath) = display_path {
                         val.follow_cell_path(&cellpath.members)?

@@ -421,12 +421,21 @@ impl<'a> CmdInput<'a> {
 
 fn handle_table_command(mut input: CmdInput<'_>) -> ShellResult<PipelineData> {
     let span = input.data.span().unwrap_or(input.call.head);
-    match input.data {
-        // Binary streams should behave as if they really are `binary` data, and printed as hex
-        PipelineDataBody::ByteStream(stream, _) if stream.type_() == ByteStreamType::Binary => Ok(
-            PipelineData::byte_stream(pretty_hex_stream(stream, input.call.head), None),
-        ),
-        PipelineDataBody::ByteStream(..) => Ok(input.data),
+    
+    // Handle ByteStream cases first since they might need early return
+    if let PipelineDataBody::ByteStream(ref stream, _) = input.data.get_body() {
+        if stream.type_() == ByteStreamType::Binary {
+            // Extract and consume the data for binary stream case
+            if let PipelineDataBody::ByteStream(stream, _) = input.data.body() {
+                return Ok(PipelineData::byte_stream(pretty_hex_stream(stream, input.call.head), None));
+            }
+        } else {
+            // For non-binary ByteStream, just return the data as-is
+            return Ok(input.data);
+        }
+    }
+    
+    match input.data.body() {
         PipelineDataBody::Value(Value::Binary { val, .. }, ..) => {
             let signals = input.engine_state.signals().clone();
             let stream = ByteStream::read_binary(val, input.call.head, signals);
@@ -467,7 +476,7 @@ fn handle_table_command(mut input: CmdInput<'_>) -> ShellResult<PipelineData> {
             input.data = PipelineData::empty();
             handle_row_stream(input, stream, metadata)
         }
-        x => Ok(x),
+        x => Ok(x.into()),
     }
 }
 
