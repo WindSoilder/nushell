@@ -156,7 +156,7 @@ fn action(
     }: &Arguments,
     head: Span,
 ) -> Value {
-    match input.body() {
+    match input {
         Value::String { val, .. } => Value::bool(
             if *case_insensitive {
                 val.to_folded_case()
