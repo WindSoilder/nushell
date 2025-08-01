@@ -115,7 +115,7 @@ pub fn to_delimited_data(
             let columns = match &value {
                 Value::List { vals, .. } => merge_descriptors(vals),
                 Value::Record { val, .. } => val.columns().cloned().collect(),
-                Value::Error { error, .. } => return Err(error.clone()),
+                Value::Error { error, .. } => return Err(*error.clone()),
                 _ => return Err(make_unsupported_input_error(value.get_type(), head, span)),
             };
             input = PipelineData::value(value, metadata.clone());

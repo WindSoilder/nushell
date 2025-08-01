@@ -119,6 +119,7 @@ use it in your pipeline."#
             .try_into_stream(engine_state)
             .unwrap_or_else(|original_input| original_input);
 
+        let input_metadata = input.metadata();
         if let PipelineDataBody::ByteStream(stream, metadata) = input.body() {
             let type_ = stream.type_();
 
@@ -252,7 +253,7 @@ use it in your pipeline."#
                 return stderr_misuse(input.span().unwrap_or(head), head);
             }
 
-            let metadata = input.metadata();
+            let metadata = input_metadata;
             let metadata_clone = metadata.clone();
 
             if matches!(input.get_body(), PipelineDataBody::ListStream(..)) {

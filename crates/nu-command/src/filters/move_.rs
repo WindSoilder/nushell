@@ -170,12 +170,15 @@ impl Command for Move {
             PipelineDataBody::Value(Value::Record { val, .. }, ..) => {
                 Ok(move_record_columns(&val, &columns, &location, head)?.into_pipeline_data())
             }
-            other => Err(ShellError::OnlySupportsThisInputType {
-                exp_input_type: "record or table".to_string(),
-                wrong_type: other.get_type().to_string(),
-                dst_span: head,
-                src_span: Span::new(head.start, head.start),
-            }),
+            other => {
+                let pipeline_data: PipelineData = other.into();
+                Err(ShellError::OnlySupportsThisInputType {
+                    exp_input_type: "record or table".to_string(),
+                    wrong_type: pipeline_data.get_type().to_string(),
+                    dst_span: head,
+                    src_span: Span::new(head.start, head.start),
+                })
+            }
         }
     }
 }

@@ -133,11 +133,14 @@ MessagePack: https://msgpack.org/
                     })
                 }
             }
-            input => Err(ShellError::PipelineMismatch {
-                exp_input_type: "binary or byte stream".into(),
-                dst_span: call.head,
-                src_span: input.span().unwrap_or(call.head),
-            }),
+            input => {
+                let pipeline_data: PipelineData = input.into();
+                Err(ShellError::PipelineMismatch {
+                    exp_input_type: "binary or byte stream".into(),
+                    dst_span: call.head,
+                    src_span: pipeline_data.span().unwrap_or(call.head),
+                })
+            }
         };
         out.map(|pd| pd.set_metadata(metadata))
     }

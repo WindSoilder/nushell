@@ -122,7 +122,8 @@ impl Command for Last {
             PipelineDataBody::Value(val, _) => {
                 let span = val.span();
                 match val {
-                    Value::List { mut vals, .. } => {
+                    Value::List { vals, .. } => {
+                        let mut vals = vals.clone();
                         if return_single_element {
                             if let Some(v) = vals.pop() {
                                 Ok(v.into_pipeline_data())
@@ -135,7 +136,8 @@ impl Command for Last {
                             Ok(Value::list(vals, span).into_pipeline_data_with_metadata(metadata))
                         }
                     }
-                    Value::Binary { mut val, .. } => {
+                    Value::Binary { val, .. } => {
+                        let mut val = val.clone();
                         if return_single_element {
                             if let Some(val) = val.pop() {
                                 Ok(Value::int(val.into(), span).into_pipeline_data())
@@ -149,7 +151,7 @@ impl Command for Last {
                         }
                     }
                     // Propagate errors by explicitly matching them before the final case.
-                    Value::Error { error, .. } => Err(**error),
+                    Value::Error { error, .. } => Err(*error.clone()),
                     other => Err(ShellError::OnlySupportsThisInputType {
                         exp_input_type: "list, binary or range".into(),
                         wrong_type: other.get_type().to_string(),

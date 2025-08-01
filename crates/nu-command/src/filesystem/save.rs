@@ -87,6 +87,19 @@ impl Command for Save {
             });
 
         let from_io_error = IoError::factory(span, path.item.as_path());
+        
+        // Check if we need to save file metadata first
+        let should_check_source = !matches!(
+            input.get_body(),
+            PipelineDataBody::Value(..) | PipelineDataBody::Empty
+        );
+        
+        let input_metadata = if should_check_source {
+            input.metadata()
+        } else {
+            Default::default()
+        };
+        
         match input.body() {
             PipelineDataBody::ByteStream(stream, metadata) => {
                 check_saving_to_source_file(metadata.as_ref(), &path, stderr_path.as_ref())?;
@@ -213,22 +226,23 @@ impl Command for Save {
 
                 Ok(PipelineData::empty())
             }
-            input => {
+            body => {
                 // It's not necessary to check if we are saving to the same file if this is a
                 // collected value, and not a stream
                 if !matches!(
-                    input.get_body(),
+                    body,
                     PipelineDataBody::Value(..) | PipelineDataBody::Empty
                 ) {
                     check_saving_to_source_file(
-                        input.metadata().as_ref(),
+                        input_metadata.as_ref(),
                         &path,
                         stderr_path.as_ref(),
                     )?;
                 }
 
+                let reconstructed_input = body.into();
                 let bytes =
-                    input_to_bytes(input, Path::new(&path.item), raw, engine_state, stack, span)?;
+                    input_to_bytes(reconstructed_input, Path::new(&path.item), raw, engine_state, stack, span)?;
 
                 // Only open file after successful conversion
                 let (mut file, _) =
@@ -336,9 +350,9 @@ fn input_to_bytes(
 ) -> Result<Vec<u8>, ShellError> {
     let ext = if raw {
         None
-    } else if let PipelineDataBody::ByteStream(..) = input {
+    } else if let PipelineDataBody::ByteStream(..) = input.get_body() {
         None
-    } else if let PipelineDataBody::Value(Value::String { .. }, ..) = input {
+    } else if let PipelineDataBody::Value(Value::String { .. }, ..) = input.get_body() {
         None
     } else {
         path.extension()
