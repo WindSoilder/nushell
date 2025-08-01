@@ -122,133 +122,137 @@ use it in your pipeline."#
         let input_metadata = input.metadata();
         match input.body() {
             PipelineDataBody::ByteStream(stream, metadata) => {
-            let type_ = stream.type_();
+                let type_ = stream.type_();
 
-            let info = StreamInfo {
-                span,
-                signals: engine_state.signals().clone(),
-                type_,
-                metadata: metadata.clone(),
-            };
+                let info = StreamInfo {
+                    span,
+                    signals: engine_state.signals().clone(),
+                    type_,
+                    metadata: metadata.clone(),
+                };
 
-            match stream.into_source() {
-                ByteStreamSource::Read(read) => {
-                    if use_stderr {
-                        return stderr_misuse(span, head);
-                    }
-
-                    let tee_thread = spawn_tee(info, eval_block)?;
-                    let tee = IoTee::new(read, tee_thread);
-
-                    Ok(PipelineData::byte_stream(
-                        ByteStream::read(tee, span, engine_state.signals().clone(), type_),
-                        metadata,
-                    ))
-                }
-                ByteStreamSource::File(file) => {
-                    if use_stderr {
-                        return stderr_misuse(span, head);
-                    }
-
-                    let tee_thread = spawn_tee(info, eval_block)?;
-                    let tee = IoTee::new(file, tee_thread);
-
-                    Ok(PipelineData::byte_stream(
-                        ByteStream::read(tee, span, engine_state.signals().clone(), type_),
-                        metadata,
-                    ))
-                }
-                #[cfg(feature = "os")]
-                ByteStreamSource::Child(mut child) => {
-                    let stderr_thread = if use_stderr {
-                        let stderr_thread = if let Some(stderr) = child.stderr.take() {
-                            let tee_thread = spawn_tee(info.clone(), eval_block)?;
-                            let tee = IoTee::new(stderr, tee_thread);
-                            match stack.stderr() {
-                                OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
-                                    child.stderr = Some(ChildPipe::Tee(Box::new(tee)));
-                                    Ok(None)
-                                }
-                                OutDest::Null => copy_on_thread(tee, io::sink(), &info).map(Some),
-                                OutDest::Print | OutDest::Inherit => {
-                                    copy_on_thread(tee, io::stderr(), &info).map(Some)
-                                }
-                                OutDest::File(file) => {
-                                    copy_on_thread(tee, file.clone(), &info).map(Some)
-                                }
-                            }?
-                        } else {
-                            None
-                        };
-
-                        if let Some(stdout) = child.stdout.take() {
-                            match stack.stdout() {
-                                OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
-                                    child.stdout = Some(stdout);
-                                    Ok(())
-                                }
-                                OutDest::Null => copy_pipe(stdout, io::sink(), &info),
-                                OutDest::Print | OutDest::Inherit => {
-                                    copy_pipe(stdout, io::stdout(), &info)
-                                }
-                                OutDest::File(file) => copy_pipe(stdout, file.as_ref(), &info),
-                            }?;
+                match stream.into_source() {
+                    ByteStreamSource::Read(read) => {
+                        if use_stderr {
+                            return stderr_misuse(span, head);
                         }
 
-                        stderr_thread
-                    } else {
-                        let stderr_thread = if let Some(stderr) = child.stderr.take() {
-                            let info = info.clone();
-                            match stack.stderr() {
-                                OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
-                                    child.stderr = Some(stderr);
-                                    Ok(None)
-                                }
-                                OutDest::Null => {
-                                    copy_pipe_on_thread(stderr, io::sink(), &info).map(Some)
-                                }
-                                OutDest::Print | OutDest::Inherit => {
-                                    copy_pipe_on_thread(stderr, io::stderr(), &info).map(Some)
-                                }
-                                OutDest::File(file) => {
-                                    copy_pipe_on_thread(stderr, file.clone(), &info).map(Some)
-                                }
-                            }?
-                        } else {
-                            None
-                        };
+                        let tee_thread = spawn_tee(info, eval_block)?;
+                        let tee = IoTee::new(read, tee_thread);
 
-                        if let Some(stdout) = child.stdout.take() {
-                            let tee_thread = spawn_tee(info.clone(), eval_block)?;
-                            let tee = IoTee::new(stdout, tee_thread);
-                            match stack.stdout() {
-                                OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
-                                    child.stdout = Some(ChildPipe::Tee(Box::new(tee)));
-                                    Ok(())
-                                }
-                                OutDest::Null => copy(tee, io::sink(), &info),
-                                OutDest::Print | OutDest::Inherit => copy(tee, io::stdout(), &info),
-                                OutDest::File(file) => copy(tee, file.as_ref(), &info),
-                            }?;
-                        }
-
-                        stderr_thread
-                    };
-
-                    if child.stdout.is_some() || child.stderr.is_some() {
                         Ok(PipelineData::byte_stream(
-                            ByteStream::child(*child, span),
+                            ByteStream::read(tee, span, engine_state.signals().clone(), type_),
                             metadata,
                         ))
-                    } else {
-                        if let Some(thread) = stderr_thread {
-                            thread.join().unwrap_or_else(|_| Err(panic_error()))?;
+                    }
+                    ByteStreamSource::File(file) => {
+                        if use_stderr {
+                            return stderr_misuse(span, head);
                         }
-                        child.wait()?;
-                        Ok(PipelineData::empty())
+
+                        let tee_thread = spawn_tee(info, eval_block)?;
+                        let tee = IoTee::new(file, tee_thread);
+
+                        Ok(PipelineData::byte_stream(
+                            ByteStream::read(tee, span, engine_state.signals().clone(), type_),
+                            metadata,
+                        ))
+                    }
+                    #[cfg(feature = "os")]
+                    ByteStreamSource::Child(mut child) => {
+                        let stderr_thread = if use_stderr {
+                            let stderr_thread = if let Some(stderr) = child.stderr.take() {
+                                let tee_thread = spawn_tee(info.clone(), eval_block)?;
+                                let tee = IoTee::new(stderr, tee_thread);
+                                match stack.stderr() {
+                                    OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
+                                        child.stderr = Some(ChildPipe::Tee(Box::new(tee)));
+                                        Ok(None)
+                                    }
+                                    OutDest::Null => {
+                                        copy_on_thread(tee, io::sink(), &info).map(Some)
+                                    }
+                                    OutDest::Print | OutDest::Inherit => {
+                                        copy_on_thread(tee, io::stderr(), &info).map(Some)
+                                    }
+                                    OutDest::File(file) => {
+                                        copy_on_thread(tee, file.clone(), &info).map(Some)
+                                    }
+                                }?
+                            } else {
+                                None
+                            };
+
+                            if let Some(stdout) = child.stdout.take() {
+                                match stack.stdout() {
+                                    OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
+                                        child.stdout = Some(stdout);
+                                        Ok(())
+                                    }
+                                    OutDest::Null => copy_pipe(stdout, io::sink(), &info),
+                                    OutDest::Print | OutDest::Inherit => {
+                                        copy_pipe(stdout, io::stdout(), &info)
+                                    }
+                                    OutDest::File(file) => copy_pipe(stdout, file.as_ref(), &info),
+                                }?;
+                            }
+
+                            stderr_thread
+                        } else {
+                            let stderr_thread = if let Some(stderr) = child.stderr.take() {
+                                let info = info.clone();
+                                match stack.stderr() {
+                                    OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
+                                        child.stderr = Some(stderr);
+                                        Ok(None)
+                                    }
+                                    OutDest::Null => {
+                                        copy_pipe_on_thread(stderr, io::sink(), &info).map(Some)
+                                    }
+                                    OutDest::Print | OutDest::Inherit => {
+                                        copy_pipe_on_thread(stderr, io::stderr(), &info).map(Some)
+                                    }
+                                    OutDest::File(file) => {
+                                        copy_pipe_on_thread(stderr, file.clone(), &info).map(Some)
+                                    }
+                                }?
+                            } else {
+                                None
+                            };
+
+                            if let Some(stdout) = child.stdout.take() {
+                                let tee_thread = spawn_tee(info.clone(), eval_block)?;
+                                let tee = IoTee::new(stdout, tee_thread);
+                                match stack.stdout() {
+                                    OutDest::Pipe | OutDest::PipeSeparate | OutDest::Value => {
+                                        child.stdout = Some(ChildPipe::Tee(Box::new(tee)));
+                                        Ok(())
+                                    }
+                                    OutDest::Null => copy(tee, io::sink(), &info),
+                                    OutDest::Print | OutDest::Inherit => {
+                                        copy(tee, io::stdout(), &info)
+                                    }
+                                    OutDest::File(file) => copy(tee, file.as_ref(), &info),
+                                }?;
+                            }
+
+                            stderr_thread
+                        };
+
+                        if child.stdout.is_some() || child.stderr.is_some() {
+                            Ok(PipelineData::byte_stream(
+                                ByteStream::child(*child, span),
+                                metadata,
+                            ))
+                        } else {
+                            if let Some(thread) = stderr_thread {
+                                thread.join().unwrap_or_else(|_| Err(panic_error()))?;
+                            }
+                            child.wait()?;
+                            Ok(PipelineData::empty())
+                        }
                     }
                 }
-            }
             }
             other_body => {
                 if use_stderr {
@@ -257,10 +261,10 @@ use it in your pipeline."#
 
                 let metadata = input_metadata;
                 let metadata_clone = metadata.clone();
-                
+
                 // Check type before consuming
                 let is_list_stream = matches!(other_body, PipelineDataBody::ListStream(..));
-                
+
                 // Convert body back to PipelineData for processing
                 let input_reconstructed: PipelineData = other_body.into();
 
@@ -271,7 +275,8 @@ use it in your pipeline."#
                     let signals = engine_state.signals().clone();
 
                     Ok(tee(input_reconstructed.into_iter(), move |rx| {
-                        let input = rx.into_pipeline_data_with_metadata(span, signals, metadata_clone);
+                        let input =
+                            rx.into_pipeline_data_with_metadata(span, signals, metadata_clone);
                         eval_block(input)
                     })
                     .map_err(&from_io_error)?
@@ -282,10 +287,10 @@ use it in your pipeline."#
                         metadata,
                     ))
                 } else {
-                // Otherwise, we can spawn a thread with the input value, but we have nowhere to
-                // send an error to other than just trying to print it to stderr.
-                let value = input_reconstructed.into_value(span)?;
-                let value_clone = value.clone();
+                    // Otherwise, we can spawn a thread with the input value, but we have nowhere to
+                    // send an error to other than just trying to print it to stderr.
+                    let value = input_reconstructed.into_value(span)?;
+                    let value_clone = value.clone();
                     tee_once(engine_state_arc, move || {
                         eval_block(value_clone.into_pipeline_data_with_metadata(metadata_clone))
                     })

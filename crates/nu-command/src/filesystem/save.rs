@@ -87,19 +87,19 @@ impl Command for Save {
             });
 
         let from_io_error = IoError::factory(span, path.item.as_path());
-        
+
         // Check if we need to save file metadata first
         let should_check_source = !matches!(
             input.get_body(),
             PipelineDataBody::Value(..) | PipelineDataBody::Empty
         );
-        
+
         let input_metadata = if should_check_source {
             input.metadata()
         } else {
             Default::default()
         };
-        
+
         match input.body() {
             PipelineDataBody::ByteStream(stream, metadata) => {
                 check_saving_to_source_file(metadata.as_ref(), &path, stderr_path.as_ref())?;
@@ -229,10 +229,7 @@ impl Command for Save {
             body => {
                 // It's not necessary to check if we are saving to the same file if this is a
                 // collected value, and not a stream
-                if !matches!(
-                    body,
-                    PipelineDataBody::Value(..) | PipelineDataBody::Empty
-                ) {
+                if !matches!(body, PipelineDataBody::Value(..) | PipelineDataBody::Empty) {
                     check_saving_to_source_file(
                         input_metadata.as_ref(),
                         &path,
@@ -241,8 +238,14 @@ impl Command for Save {
                 }
 
                 let reconstructed_input = body.into();
-                let bytes =
-                    input_to_bytes(reconstructed_input, Path::new(&path.item), raw, engine_state, stack, span)?;
+                let bytes = input_to_bytes(
+                    reconstructed_input,
+                    Path::new(&path.item),
+                    raw,
+                    engine_state,
+                    stack,
+                    span,
+                )?;
 
                 // Only open file after successful conversion
                 let (mut file, _) =

@@ -75,12 +75,7 @@ pub fn calculate(
             helper_for_tables(&s.into_iter().collect::<Vec<Value>>(), span, name, mf)
         }
         PipelineDataBody::Value(Value::List { vals, .. }, ..) => match &vals[..] {
-            [Value::Record { .. }, _end @ ..] => helper_for_tables(
-                &vals,
-                span,
-                name,
-                mf,
-            ),
+            [Value::Record { .. }, _end @ ..] => helper_for_tables(&vals, span, name, mf),
             _ => mf(&vals, span, name),
         },
         PipelineDataBody::Value(Value::Record { val, .. }, ..) => {

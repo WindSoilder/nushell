@@ -48,14 +48,7 @@ impl Command for MathSqrt {
         if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
-        if let PipelineDataBody::Value(
-            Value::Range {
-                val,
-                internal_span,
-            },
-            ..,
-        ) = input.get_body()
-        {
+        if let PipelineDataBody::Value(Value::Range { val, internal_span }, ..) = input.get_body() {
             ensure_bounded(val, *internal_span, head)?;
         }
         input.map(move |value| operate(value, head), engine_state.signals())
@@ -72,14 +65,7 @@ impl Command for MathSqrt {
         if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
-        if let PipelineDataBody::Value(
-            Value::Range {
-                val,
-                internal_span,
-            },
-            ..,
-        ) = input.get_body()
-        {
+        if let PipelineDataBody::Value(Value::Range { val, internal_span }, ..) = input.get_body() {
             ensure_bounded(val, *internal_span, head)?;
         }
         input.map(

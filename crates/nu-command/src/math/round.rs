@@ -55,14 +55,7 @@ impl Command for MathRound {
         if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
-        if let PipelineDataBody::Value(
-            Value::Range {
-                val,
-                internal_span,
-            },
-            ..,
-        ) = input.get_body()
-        {
+        if let PipelineDataBody::Value(Value::Range { val, internal_span }, ..) = input.get_body() {
             ensure_bounded(val, *internal_span, head)?;
         }
         input.map(
@@ -83,14 +76,7 @@ impl Command for MathRound {
         if input.is_nothing() {
             return Err(ShellError::PipelineEmpty { dst_span: head });
         }
-        if let PipelineDataBody::Value(
-            Value::Range {
-                val,
-                internal_span,
-            },
-            ..,
-        ) = input.get_body()
-        {
+        if let PipelineDataBody::Value(Value::Range { val, internal_span }, ..) = input.get_body() {
             ensure_bounded(val, *internal_span, head)?;
         }
         input.map(

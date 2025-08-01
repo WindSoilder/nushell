@@ -8,8 +8,8 @@ use nu_plugin::{Plugin, PluginCommand};
 use nu_plugin_engine::{PluginCustomValueWithSource, PluginSource, WithSource};
 use nu_plugin_protocol::PluginCustomValue;
 use nu_protocol::{
-    CustomValue, Example, IntoSpanned as _, LabeledError, PipelineData, PipelineDataBody, ShellError, Signals, Span,
-    Value,
+    CustomValue, Example, IntoSpanned as _, LabeledError, PipelineData, PipelineDataBody,
+    ShellError, Signals, Span, Value,
     debugger::WithoutDebug,
     engine::{EngineState, Stack, StateWorkingSet},
     report_shell_error,

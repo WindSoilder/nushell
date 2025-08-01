@@ -180,11 +180,12 @@ impl Command for Last {
                                     // This must be EOF.
                                     if return_single_element {
                                         if !buf.is_empty() {
-                                            return Ok(
-                                                Value::int(buf[0] as i64, head).into_pipeline_data()
-                                            );
+                                            return Ok(Value::int(buf[0] as i64, head)
+                                                .into_pipeline_data());
                                         } else {
-                                            return Err(ShellError::AccessEmptyContent { span: head });
+                                            return Err(ShellError::AccessEmptyContent {
+                                                span: head,
+                                            });
                                         }
                                     } else {
                                         return Ok(Value::binary(buf, head).into_pipeline_data());

@@ -250,19 +250,19 @@ fn parse_closure_result(
             other => {
                 let pipeline_data: PipelineData = other.into();
                 let error = pipeline_data
-                .into_value(head)
-                .map(|val| ShellError::GenericError {
-                    error: "Invalid block return".into(),
-                    msg: format!("Expected record, found {}", val.get_type()),
-                    span: Some(val.span()),
-                    help: None,
-                    inner: vec![],
-                })
-                .unwrap_or_else(|err| err);
+                    .into_value(head)
+                    .map(|val| ShellError::GenericError {
+                        error: "Invalid block return".into(),
+                        msg: format!("Expected record, found {}", val.get_type()),
+                        span: Some(val.span()),
+                        help: None,
+                        inner: vec![],
+                    })
+                    .unwrap_or_else(|err| err);
 
-            (Some(Value::error(error, head)), None)
+                (Some(Value::error(error, head)), None)
             }
-        }
+        },
 
         // error -> error and stop
         Err(error) => (Some(Value::error(error, head)), None),
