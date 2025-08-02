@@ -73,20 +73,15 @@ impl Command for BytesSplit {
             });
         }
 
+        let input_span = input.span().unwrap_or(head);
         let (split_read, md) = match input.body() {
             PipelineDataBody::Value(Value::Binary { val, .. }, md) => (
                 ByteStream::read_binary(val, head, engine_state.signals().clone()).split(separator),
                 md,
             ),
             PipelineDataBody::ByteStream(stream, md) => (stream.split(separator), md),
-            _body => {
-                let span = head; // Use head span as fallback
-                return Err(ShellError::UnsupportedInput {
-                    msg: "Input data is not supported by this command".into(),
-                    input: "Only binary values and byte streams are supported".into(),
-                    msg_span: span,
-                    input_span: span,
-                });
+            input => {
+                return Err(PipelineData::from(input).unsupported_input_error("bytes", input_span));
             }
         };
         if let Some(split) = split_read {

@@ -112,32 +112,34 @@ with 'transpose' first."#
             | PipelineDataBody::Value(Value::List { .. }, ..)
             | PipelineDataBody::ListStream(..)) => {
                 let mut closure = ClosureEval::new(engine_state, stack, closure);
-                let reconstructed_input: PipelineData = body.into();
-                Ok(reconstructed_input
+                Ok(PipelineData::from(body)
                     .into_iter()
                     .map_while(move |value| {
                         let span = value.span();
                         let is_error = value.is_error();
                         match closure.run_with_value(value) {
-                            Ok(data) => match data.get_body() {
-                                PipelineDataBody::ListStream(..) => {
-                                    if let PipelineDataBody::ListStream(s, ..) = data.body() {
-                                        let mut vals = vec![];
-                                        for v in s {
-                                            if let Value::Error { .. } = v {
-                                                return Some(v);
-                                            } else {
-                                                vals.push(v)
-                                            }
+                            Ok(data) => match data.body() {
+                                PipelineDataBody::ListStream(s, ..) => {
+                                    let mut vals = vec![];
+                                    for v in s {
+                                        if let Value::Error { .. } = v {
+                                            return Some(v);
+                                        } else {
+                                            vals.push(v)
                                         }
-                                        Some(Value::list(vals, span))
-                                    } else {
-                                        unreachable!()
                                     }
+                                    Some(Value::list(vals, span))
                                 }
-                                _ => Some(data.into_value(head).unwrap_or_else(|err| {
-                                    Value::error(chain_error_with_input(err, is_error, span), span)
-                                })),
+                                other => {
+                                    Some(PipelineData::from(other).into_value(head).unwrap_or_else(
+                                        |err| {
+                                            Value::error(
+                                                chain_error_with_input(err, is_error, span),
+                                                span,
+                                            )
+                                        },
+                                    ))
+                                }
                             },
                             Err(error) => {
                                 let error = chain_error_with_input(error, is_error, span);

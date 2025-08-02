@@ -237,9 +237,8 @@ impl Command for Save {
                     )?;
                 }
 
-                let reconstructed_input = body.into();
                 let bytes = input_to_bytes(
-                    reconstructed_input,
+                    PipelineData::from(body),
                     Path::new(&path.item),
                     raw,
                     engine_state,

@@ -84,37 +84,9 @@ impl Command for InputList {
         let config = stack.get_config(engine_state);
 
         let options: Vec<Options> = match input.body() {
-            PipelineDataBody::Value(Value::Range { val, .. }, ..) => (*val)
-                .into_range_iter(head, engine_state.signals().clone())
-                .map(move |val| {
-                    let display_value = if let Some(ref cellpath) = display_path {
-                        val.follow_cell_path(&cellpath.members)?
-                            .to_expanded_string(", ", &config)
-                    } else {
-                        val.to_expanded_string(", ", &config)
-                    };
-                    Ok(Options {
-                        name: display_value,
-                        value: val,
-                    })
-                })
-                .collect::<Result<Vec<_>, ShellError>>()?,
-            PipelineDataBody::Value(Value::List { vals, .. }, ..) => vals
-                .into_iter()
-                .map(move |val| {
-                    let display_value = if let Some(ref cellpath) = display_path {
-                        val.follow_cell_path(&cellpath.members)?
-                            .to_expanded_string(", ", &config)
-                    } else {
-                        val.to_expanded_string(", ", &config)
-                    };
-                    Ok(Options {
-                        name: display_value,
-                        value: val,
-                    })
-                })
-                .collect::<Result<Vec<_>, ShellError>>()?,
-            PipelineDataBody::ListStream(stream, ..) => stream
+            body @ (PipelineDataBody::Value(Value::Range { .. }, ..)
+            | PipelineDataBody::Value(Value::List { .. }, ..)
+            | PipelineDataBody::ListStream(..)) => PipelineData::from(body)
                 .into_iter()
                 .map(move |val: Value| -> Result<Options, ShellError> {
                     let display_value = if let Some(ref cellpath) = display_path {

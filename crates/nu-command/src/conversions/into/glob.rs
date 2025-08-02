@@ -96,12 +96,11 @@ fn glob_helper(
             Ok(Value::glob(stream.into_string()?, false, head).into_pipeline_data())
         }
         body => {
-            let reconstructed_input = PipelineData::from(body); // Reconstruct PipelineData for operate function
             let args = Arguments { cell_paths };
             operate(
                 action,
                 args,
-                reconstructed_input,
+                PipelineData::from(body),
                 head,
                 engine_state.signals(),
             )

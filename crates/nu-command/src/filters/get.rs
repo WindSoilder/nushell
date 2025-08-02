@@ -227,12 +227,8 @@ pub fn follow_cell_path_into_stream(
     let has_int_member = cell_path
         .iter()
         .any(|it| matches!(it, PathMember::Int { .. }));
-    match data.get_body() {
-        PipelineDataBody::ListStream(..) if !has_int_member => {
-            let stream = match data.body() {
-                PipelineDataBody::ListStream(stream, ..) => stream,
-                _ => unreachable!(),
-            };
+    match data.body() {
+        PipelineDataBody::ListStream(stream, ..) if !has_int_member => {
             let result = stream
                 .into_iter()
                 .map(move |value| {
@@ -248,7 +244,7 @@ pub fn follow_cell_path_into_stream(
             Ok(result)
         }
 
-        _ => data
+        other => PipelineData::from(other)
             .follow_cell_path(&cell_path, head)
             .map(|x| x.into_pipeline_data()),
     }

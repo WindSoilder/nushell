@@ -1,8 +1,8 @@
 use csv::WriterBuilder;
 use nu_cmd_base::formats::to::delimited::merge_descriptors;
 use nu_protocol::{
-    ByteStream, ByteStreamType, Config, PipelineData, ShellError, Signals, Span, Spanned, Value,
-    shell_error::io::IoError,
+    ByteStream, ByteStreamType, Config, PipelineData, PipelineDataBody, ShellError, Signals, Span,
+    Spanned, Value, shell_error::io::IoError,
 };
 use std::{iter, sync::Arc};
 
@@ -104,6 +104,23 @@ pub fn to_delimited_data(
         call_span: head,
     })?;
 
+    // Check to ensure the input is likely one of our supported types first. We can't check a stream
+    // without consuming it though
+    match input.get_body() {
+        PipelineDataBody::Value(Value::List { .. } | Value::Record { .. }, _) => (),
+        PipelineDataBody::Value(Value::Error { error, .. }, _) => {
+            return Err(error.as_ref().clone());
+        }
+        PipelineDataBody::Value(other, _) => {
+            return Err(make_unsupported_input_error(other.get_type(), head, span));
+        }
+        PipelineDataBody::ByteStream(..) => {
+            return Err(make_unsupported_input_error("byte stream", head, span));
+        }
+        PipelineDataBody::ListStream(..) => (),
+        PipelineDataBody::Empty => (),
+    }
+
     // Determine the columns we'll use. This is necessary even if we don't write the header row,
     // because we need to write consistent columns.
     let columns = match columns {
@@ -115,7 +132,6 @@ pub fn to_delimited_data(
             let columns = match &value {
                 Value::List { vals, .. } => merge_descriptors(vals),
                 Value::Record { val, .. } => val.columns().cloned().collect(),
-                Value::Error { error, .. } => return Err(*error.clone()),
                 _ => return Err(make_unsupported_input_error(value.get_type(), head, span)),
             };
             input = PipelineData::value(value, metadata.clone());

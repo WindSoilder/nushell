@@ -149,6 +149,7 @@ impl Command for Move {
         };
 
         let metadata = input.metadata();
+        let input_type = input.get_type();
 
         match input.get_body() {
             PipelineDataBody::Value(Value::List { .. }, ..)
@@ -170,21 +171,12 @@ impl Command for Move {
             PipelineDataBody::Value(Value::Record { val, .. }, ..) => {
                 Ok(move_record_columns(val, &columns, &location, head)?.into_pipeline_data())
             }
-            other => {
-                // Create pipeline data from the original input since we can't convert from reference
-                let input_type = match other {
-                    PipelineDataBody::Empty => "null".to_string(),
-                    PipelineDataBody::Value(val, _) => val.get_type().to_string(),
-                    PipelineDataBody::ListStream(_, _) => "list".to_string(),
-                    PipelineDataBody::ByteStream(_, _) => "binary".to_string(),
-                };
-                Err(ShellError::OnlySupportsThisInputType {
-                    exp_input_type: "record or table".to_string(),
-                    wrong_type: input_type,
-                    dst_span: head,
-                    src_span: Span::new(head.start, head.start),
-                })
-            }
+            _ => Err(ShellError::OnlySupportsThisInputType {
+                exp_input_type: "record or table".to_string(),
+                wrong_type: input_type.to_string(),
+                dst_span: head,
+                src_span: Span::new(head.start, head.start),
+            }),
         }
     }
 }

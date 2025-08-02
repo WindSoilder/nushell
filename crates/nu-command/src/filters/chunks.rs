@@ -120,7 +120,6 @@ pub fn chunks(
     span: Span,
 ) -> Result<PipelineData, ShellError> {
     let from_io_error = IoError::factory(span, None);
-    let input_type = input.get_type();
     match input.body() {
         PipelineDataBody::Value(Value::List { vals, .. }, metadata) => {
             let chunks = ChunksIter::new(vals, chunk_size, span);
@@ -168,12 +167,7 @@ pub fn chunks(
             };
             Ok(pipeline_data)
         }
-        _ => Err(ShellError::OnlySupportsThisInputType {
-            exp_input_type: "list".into(),
-            wrong_type: input_type.to_string(),
-            dst_span: span,
-            src_span: span,
-        }),
+        input => Err(PipelineData::from(input).unsupported_input_error("list", span)),
     }
 }
 

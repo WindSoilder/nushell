@@ -262,8 +262,7 @@ fn reject(
         }
 
         input => {
-            let pipeline_data: PipelineData = input.into();
-            let mut val = pipeline_data.into_value(span)?;
+            let mut val = PipelineData::from(input).into_value(span)?;
 
             for cell_path in new_columns {
                 val.remove_data_at_cell_path(&cell_path.members)?;

@@ -93,10 +93,10 @@ impl Command for Last {
             return Ok(Value::list(Vec::new(), head).into_pipeline_data_with_metadata(metadata));
         }
 
-        match input.get_body() {
-            PipelineDataBody::ListStream(_, _)
-            | PipelineDataBody::Value(Value::Range { .. }, _) => {
-                let iterator = input.into_iter_strict(head)?;
+        match input.body() {
+            body @ (PipelineDataBody::ListStream(_, _)
+            | PipelineDataBody::Value(Value::Range { .. }, _)) => {
+                let iterator = PipelineData::from(body).into_iter_strict(head)?;
 
                 // only keep the last `rows` in memory
                 let mut buf = VecDeque::new();
@@ -122,8 +122,7 @@ impl Command for Last {
             PipelineDataBody::Value(val, _) => {
                 let span = val.span();
                 match val {
-                    Value::List { vals, .. } => {
-                        let mut vals = vals.clone();
+                    Value::List { mut vals, .. } => {
                         if return_single_element {
                             if let Some(v) = vals.pop() {
                                 Ok(v.into_pipeline_data())
@@ -136,8 +135,7 @@ impl Command for Last {
                             Ok(Value::list(vals, span).into_pipeline_data_with_metadata(metadata))
                         }
                     }
-                    Value::Binary { val, .. } => {
-                        let mut val = val.clone();
+                    Value::Binary { mut val, .. } => {
                         if return_single_element {
                             if let Some(val) = val.pop() {
                                 Ok(Value::int(val.into(), span).into_pipeline_data())
@@ -151,7 +149,7 @@ impl Command for Last {
                         }
                     }
                     // Propagate errors by explicitly matching them before the final case.
-                    Value::Error { error, .. } => Err(*error.clone()),
+                    Value::Error { error, .. } => Err(*error),
                     other => Err(ShellError::OnlySupportsThisInputType {
                         exp_input_type: "list, binary or range".into(),
                         wrong_type: other.get_type().to_string(),
@@ -160,51 +158,45 @@ impl Command for Last {
                     }),
                 }
             }
-            PipelineDataBody::ByteStream(..) => {
-                // Need to consume the input to get the stream
-                if let PipelineDataBody::ByteStream(stream, ..) = input.body() {
-                    if stream.type_().is_binary_coercible() {
-                        let span = stream.span();
-                        if let Some(mut reader) = stream.reader() {
-                            // Have to be a bit tricky here, but just consume into a VecDeque that we
-                            // shrink to fit each time
-                            const TAKE: u64 = 8192;
-                            let mut buf = VecDeque::with_capacity(rows + TAKE as usize);
-                            loop {
-                                let taken = std::io::copy(&mut (&mut reader).take(TAKE), &mut buf)
-                                    .map_err(|err| IoError::new(err, span, None))?;
-                                if buf.len() > rows {
-                                    buf.drain(..(buf.len() - rows));
-                                }
-                                if taken < TAKE {
-                                    // This must be EOF.
-                                    if return_single_element {
-                                        if !buf.is_empty() {
-                                            return Ok(Value::int(buf[0] as i64, head)
-                                                .into_pipeline_data());
-                                        } else {
-                                            return Err(ShellError::AccessEmptyContent {
-                                                span: head,
-                                            });
-                                        }
+            PipelineDataBody::ByteStream(stream, ..) => {
+                if stream.type_().is_binary_coercible() {
+                    let span = stream.span();
+                    if let Some(mut reader) = stream.reader() {
+                        // Have to be a bit tricky here, but just consume into a VecDeque that we
+                        // shrink to fit each time
+                        const TAKE: u64 = 8192;
+                        let mut buf = VecDeque::with_capacity(rows + TAKE as usize);
+                        loop {
+                            let taken = std::io::copy(&mut (&mut reader).take(TAKE), &mut buf)
+                                .map_err(|err| IoError::new(err, span, None))?;
+                            if buf.len() > rows {
+                                buf.drain(..(buf.len() - rows));
+                            }
+                            if taken < TAKE {
+                                // This must be EOF.
+                                if return_single_element {
+                                    if !buf.is_empty() {
+                                        return Ok(
+                                            Value::int(buf[0] as i64, head).into_pipeline_data()
+                                        );
                                     } else {
-                                        return Ok(Value::binary(buf, head).into_pipeline_data());
+                                        return Err(ShellError::AccessEmptyContent { span: head });
                                     }
+                                } else {
+                                    return Ok(Value::binary(buf, head).into_pipeline_data());
                                 }
                             }
-                        } else {
-                            Ok(PipelineData::empty())
                         }
                     } else {
-                        Err(ShellError::OnlySupportsThisInputType {
-                            exp_input_type: "list, binary or range".into(),
-                            wrong_type: stream.type_().describe().into(),
-                            dst_span: head,
-                            src_span: stream.span(),
-                        })
+                        Ok(PipelineData::empty())
                     }
                 } else {
-                    unreachable!("ByteStream case should have been matched")
+                    Err(ShellError::OnlySupportsThisInputType {
+                        exp_input_type: "list, binary or range".into(),
+                        wrong_type: stream.type_().describe().into(),
+                        dst_span: head,
+                        src_span: stream.span(),
+                    })
                 }
             }
             PipelineDataBody::Empty => Err(ShellError::OnlySupportsThisInputType {

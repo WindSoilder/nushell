@@ -132,17 +132,18 @@ In this case, generation also stops when the input stream stops."#
             | PipelineDataBody::Value(Value::List { .. }, ..)
             | PipelineDataBody::ListStream(..)) => {
                 let mut state = Some(get_initial_state(initial, &block.signature, call.head)?);
-                let pipeline_data: PipelineData = input.into();
-                let iter = pipeline_data.into_iter().map_while(move |item| {
-                    let state_arg = state.take()?;
-                    let closure_result = closure
-                        .add_arg(item)
-                        .add_arg(state_arg)
-                        .run_with_input(PipelineData::empty());
-                    let (output, next_input) = parse_closure_result(closure_result, head);
-                    state = next_input;
-                    Some(output)
-                });
+                let iter = PipelineData::from(input)
+                    .into_iter()
+                    .map_while(move |item| {
+                        let state_arg = state.take()?;
+                        let closure_result = closure
+                            .add_arg(item)
+                            .add_arg(state_arg)
+                            .run_with_input(PipelineData::empty());
+                        let (output, next_input) = parse_closure_result(closure_result, head);
+                        state = next_input;
+                        Some(output)
+                    });
                 Ok(iter
                     .flatten()
                     .into_pipeline_data(call.head, engine_state.signals().clone()))

@@ -570,13 +570,7 @@ fn split_string_if_multiline(input: PipelineData, head_span: Span) -> PipelineDa
                 )
                 .into_pipeline_data_with_metadata(metadata)
             } else {
-                PipelineData::value(
-                    Value::String {
-                        val,
-                        internal_span: span,
-                    },
-                    metadata,
-                )
+                PipelineData::value(Value::string(val, span), metadata)
             }
         }
         other => PipelineData::from(other).set_metadata(metadata),
