@@ -1312,8 +1312,8 @@ impl Value {
                 PathMember::String {
                     val: col_name,
                     span,
+                    optional,
                     casing,
-                    ..
                 } => match self {
                     Value::List { vals, .. } => {
                         for val in vals.iter_mut() {
@@ -1324,7 +1324,7 @@ impl Value {
                                         record.to_mut().cased_mut(*casing).get_mut(col_name)
                                     {
                                         val.update_data_at_cell_path(path, new_val.clone())?;
-                                    } else {
+                                    } else if !*optional {
                                         return Err(ShellError::CantFindColumn {
                                             col_name: col_name.clone(),
                                             span: Some(*span),
@@ -1346,7 +1346,7 @@ impl Value {
                     Value::Record { val: record, .. } => {
                         if let Some(val) = record.to_mut().cased_mut(*casing).get_mut(col_name) {
                             val.update_data_at_cell_path(path, new_val)?;
-                        } else {
+                        } else if !*optional {
                             return Err(ShellError::CantFindColumn {
                                 col_name: col_name.clone(),
                                 span: Some(*span),
@@ -1364,18 +1364,22 @@ impl Value {
                     }
                 },
                 PathMember::Int {
-                    val: row_num, span, ..
+                    val: row_num,
+                    span,
+                    optional,
                 } => match self {
                     Value::List { vals, .. } => {
                         if let Some(v) = vals.get_mut(*row_num) {
                             v.update_data_at_cell_path(path, new_val)?;
-                        } else if vals.is_empty() {
-                            return Err(ShellError::AccessEmptyContent { span: *span });
-                        } else {
-                            return Err(ShellError::AccessBeyondEnd {
-                                max_idx: vals.len() - 1,
-                                span: *span,
-                            });
+                        } else if !*optional {
+                            if vals.is_empty() {
+                                return Err(ShellError::AccessEmptyContent { span: *span });
+                            } else {
+                                return Err(ShellError::AccessBeyondEnd {
+                                    max_idx: vals.len() - 1,
+                                    span: *span,
+                                });
+                            }
                         }
                     }
                     Value::Error { error, .. } => return Err(*error.clone()),

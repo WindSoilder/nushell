@@ -12,6 +12,27 @@ fn sets_the_column() {
 }
 
 #[test]
+fn sets_optional_column_on_records() {
+    let actual = nu!("{a: 1} | update a? 2 | get a");
+    assert_eq!(actual.out, "2");
+
+    let actual = nu!("let x = {a: 1};$x | update b? 2 | to nuon");
+    assert_eq!(actual.out, "{a: 1}");
+}
+
+#[test]
+fn sets_optional_column_on_table() {
+    let actual = nu!("[{a: 1}] | update a? 2 | to nuon");
+    assert_eq!(actual.out, "[[a]; [2]]");
+
+    let actual = nu!("let x = [{a: 1}];$x | update b? 2 | to nuon");
+    assert_eq!(actual.out, "[[a]; [1]]");
+
+    let actual = nu!("let x = [{a: 1}];$x | update 3? 2 | to nuon");
+    assert_eq!(actual.out, "[[a]; [1]]");
+}
+
+#[test]
 fn doesnt_convert_record_to_table() {
     let actual = nu!("{a:1} | update a 2 | to nuon");
 
