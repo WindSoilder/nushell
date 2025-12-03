@@ -488,6 +488,7 @@ impl<'a> StateWorkingSet<'a> {
             if self.search_predecls {
                 for (name, id) in scope_frame.predecls.iter() {
                     if id == &decl_id {
+                        println!("1111");
                         return Some(name);
                     }
                 }
@@ -500,6 +501,7 @@ impl<'a> StateWorkingSet<'a> {
                 if self.search_predecls {
                     for (name, id) in overlay_frame.predecls.iter() {
                         if id == &decl_id {
+                            println!("2222");
                             return Some(name);
                         }
                     }
@@ -508,6 +510,7 @@ impl<'a> StateWorkingSet<'a> {
                 if visibility.is_decl_id_visible(&decl_id) {
                     for (name, id) in overlay_frame.decls.iter() {
                         if id == &decl_id {
+                            println!("3333");
                             return Some(name);
                         }
                     }

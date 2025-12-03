@@ -12,7 +12,7 @@ use log::trace;
 use nu_path::canonicalize_with;
 use nu_path::is_windows_device_path;
 use nu_protocol::{
-    Alias, BlockId, CommandWideCompleter, CustomExample, DeclId, FromValue, Module, ModuleId,
+    Alias, BlockId, CommandWideCompleter, CustomExample, DeclId, FromValue, Id, Module, ModuleId,
     ParseError, PositionalArg, ResolvedImportPattern, ShellError, Signature, Span, Spanned,
     SyntaxShape, Type, Value, VarId,
     ast::{
@@ -3207,7 +3207,16 @@ pub fn parse_overlay_hide(working_set: &mut StateWorkingSet, call: Box<Call>) ->
         return pipeline;
     }
 
+    let id = working_set.find_decl(b"bar").unwrap();
+    println!(
+        "-----debug id: {id:?}, before: {:?}",
+        String::from_utf8(working_set.find_decl_name(id).unwrap().to_vec()).unwrap()
+    );
     working_set.remove_overlay(overlay_name.as_bytes(), keep_custom);
+    println!(
+        "-----debug id: {id:?}, after: {:?}",
+        String::from_utf8(working_set.find_decl_name(id).unwrap().to_vec()).unwrap()
+    );
 
     pipeline
 }

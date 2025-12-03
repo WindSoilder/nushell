@@ -1,5 +1,5 @@
 use nu_engine::command_prelude::*;
-use nu_protocol::engine::CommandType;
+use nu_protocol::{Id, engine::CommandType};
 
 #[derive(Clone)]
 pub struct OverlayHide;
@@ -97,6 +97,11 @@ impl Command for OverlayHide {
             stack.add_env_var(name, val);
         }
         stack.update_config(engine_state)?;
+        // println!(
+        //     "debug: {:?}, {:?}",
+        //     engine_state.find_decl(b"bar", &[]),
+        //     engine_state.find_decl_name(Id::new(462), &[])
+        // );
         Ok(PipelineData::empty())
     }
 
