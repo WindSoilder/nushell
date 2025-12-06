@@ -60,7 +60,11 @@ pub struct ScopeFrame {
     pub removed_overlays: Vec<Vec<u8>>,
 
     /// temporary storage for predeclarations
-    pub predecls: HashMap<Vec<u8>, DeclId>,
+    /// The value is a decl_id, and which overlay it should belong to
+    pub predecls: HashMap<Vec<u8>, (DeclId, Vec<u8>)>,
+
+    /// temporary storage for overlay usage.
+    pub pre_active_overlays: Vec<Vec<u8>>,
 }
 
 impl ScopeFrame {
@@ -70,6 +74,7 @@ impl ScopeFrame {
             active_overlays: vec![],
             removed_overlays: vec![],
             predecls: HashMap::new(),
+            pre_active_overlays: vec![],
         }
     }
 
@@ -79,6 +84,7 @@ impl ScopeFrame {
             active_overlays: vec![OverlayId::new(0)],
             removed_overlays: vec![],
             predecls: HashMap::new(),
+            pre_active_overlays: vec![],
         }
     }
 

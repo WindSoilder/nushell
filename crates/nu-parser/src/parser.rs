@@ -7,6 +7,7 @@ use crate::{
     parse_keywords::*,
     parse_patterns::parse_pattern,
     parse_shape_specs::{parse_completer, parse_shape_name, parse_type},
+    preparse_keywords::*,
     type_check::{self, check_range_types, math_result_type, type_compatible},
 };
 use itertools::Itertools;
@@ -6651,7 +6652,8 @@ pub fn parse_block(
     // that share the same block can see each other
     for pipeline in &lite_block.block {
         if pipeline.commands.len() == 1 {
-            parse_def_predecl(working_set, pipeline.commands[0].command_parts())
+            parse_def_predecl(working_set, pipeline.commands[0].command_parts());
+            preparse_overlay_keyword(working_set, pipeline.commands[0].command_parts());
         }
     }
 

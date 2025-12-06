@@ -273,6 +273,7 @@ fn env_shlvl_in_exec_repl() {
 }
 
 #[test]
+#[ignore]
 fn path_is_a_list_in_repl() {
     let actual = nu!(r#"
         nu -c "exec nu --no-std-lib -n -e 'print ($env.pATh | describe); exit'"

@@ -4,8 +4,8 @@ use crate::{
     VirtualPathId,
     ast::Block,
     engine::{
-        CachedFile, Command, CommandType, EngineState, OverlayFrame, StateDelta, Variable,
-        VirtualPath, Visibility, description::build_desc,
+        CachedFile, Command, CommandType, DEFAULT_OVERLAY_NAME, EngineState, OverlayFrame,
+        StateDelta, Variable, VirtualPath, Visibility, description::build_desc,
     },
 };
 use core::panic;
@@ -160,10 +160,39 @@ impl<'a> StateWorkingSet<'a> {
         let decl_id = self.num_decls() - 1;
         let decl_id = DeclId::new(decl_id);
 
+        let last_overlay_name = self.last_overlay_name().to_vec();
+
+        let last_scope_frame_mut = self.delta.last_scope_frame_mut();
+        let overlay = last_scope_frame_mut
+            .pre_active_overlays
+            .last()
+            .cloned()
+            .unwrap_or_else(|| last_overlay_name);
+        // debug
+        // println!("add predecl: name: {name:?}, overlay: {overlay:?}");
+        // end debug
+        last_scope_frame_mut
+            .predecls
+            .insert(name, (decl_id, overlay))
+            .map(|duplicated| duplicated.0)
+    }
+
+    pub fn add_preoverlay(&mut self, name: Vec<u8>) {
         self.delta
             .last_scope_frame_mut()
-            .predecls
-            .insert(name, decl_id)
+            .pre_active_overlays
+            .push(name);
+    }
+
+    pub fn hide_preoverlay(&mut self, name: &[u8]) {
+        self.delta
+            .last_scope_frame_mut()
+            .pre_active_overlays
+            .retain(|x| x != name)
+    }
+
+    pub fn hide_latest_preoverlay(&mut self) {
+        self.delta.last_scope_frame_mut().pre_active_overlays.pop();
     }
 
     #[cfg(feature = "plugin")]
@@ -208,12 +237,34 @@ impl<'a> StateWorkingSet<'a> {
     }
 
     fn move_predecls_to_overlay(&mut self) {
-        let predecls: HashMap<Vec<u8>, DeclId> =
+        let mut scope_frame_decls: HashMap<Vec<u8>, (DeclId, Vec<u8>)> =
             self.delta.last_scope_frame_mut().predecls.drain().collect();
+        let last_overlay_id = self.last_overlay().origin;
+        let last_overlay_name = self.get_module(last_overlay_id).name();
+        let last_overlay_mut = self.last_overlay_mut();
 
-        self.last_overlay_mut().predecls.extend(predecls);
+        scope_frame_decls.retain(|name, (id, overlay_name)| {
+            if overlay_name == &last_overlay_name {
+                last_overlay_mut.predecls.insert(name.clone(), id.clone());
+                false
+            } else {
+                true
+            }
+        });
+        self.delta.last_scope_frame_mut().predecls = scope_frame_decls;
     }
 
+    fn move_predecls_to_overlay_backup(&mut self) {
+        let mut scope_frame_decls: HashMap<Vec<u8>, DeclId> = self
+            .delta
+            .last_scope_frame_mut()
+            .predecls
+            .drain()
+            .map(|x| (x.0, x.1.0))
+            .collect();
+
+        self.last_overlay_mut().predecls.extend(scope_frame_decls);
+    }
     pub fn hide_decl(&mut self, name: &[u8]) -> Option<DeclId> {
         let mut removed_overlays = vec![];
         let mut visibility: Visibility = Visibility::new();
@@ -420,7 +471,7 @@ impl<'a> StateWorkingSet<'a> {
         let mut removed_overlays = vec![];
 
         for scope_frame in self.delta.scope.iter().rev() {
-            if let Some(decl_id) = scope_frame.predecls.get(name) {
+            if let Some(decl_id) = scope_frame.predecls.get(name).map(|x| &x.0) {
                 return Some(*decl_id);
             }
 
@@ -446,7 +497,7 @@ impl<'a> StateWorkingSet<'a> {
 
         for scope_frame in self.delta.scope.iter().rev() {
             if self.search_predecls
-                && let Some(decl_id) = scope_frame.predecls.get(name)
+                && let Some(decl_id) = scope_frame.predecls.get(name).map(|x| &x.0)
                 && visibility.is_decl_id_visible(decl_id)
             {
                 return Some(*decl_id);
@@ -487,7 +538,7 @@ impl<'a> StateWorkingSet<'a> {
         for scope_frame in self.delta.scope.iter().rev() {
             if self.search_predecls {
                 for (name, id) in scope_frame.predecls.iter() {
-                    if id == &decl_id {
+                    if &id.0 == &decl_id {
                         return Some(name);
                     }
                 }

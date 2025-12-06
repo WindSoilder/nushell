@@ -9,6 +9,7 @@ mod parse_keywords;
 mod parse_patterns;
 mod parse_shape_specs;
 mod parser;
+mod preparse_keywords;
 mod type_check;
 
 pub use deparse::escape_for_script_arg;

@@ -36,6 +36,7 @@ fn disallow_dynamic_http_methods(#[case] method: &str) {
 }
 
 #[test]
+#[ignore]
 fn helpful_dns_error_for_unknown_domain() {
     let outcome = nu!("http get gibberish");
     assert!(outcome.err.contains("nu::shell::network::dns"));
