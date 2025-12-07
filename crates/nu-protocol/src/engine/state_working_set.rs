@@ -942,8 +942,6 @@ impl<'a> StateWorkingSet<'a> {
             .retain(|id| id != &overlay_id);
         last_scope_frame.active_overlays.push(overlay_id);
 
-        self.move_predecls_to_overlay();
-
         self.use_decls(definitions.decls);
         self.use_modules(definitions.modules);
 
