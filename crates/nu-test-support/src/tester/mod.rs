@@ -9,7 +9,7 @@ use std::{
 
 use nu_protocol::{
     CompileError, Config, FromValue, IntoValue, LabeledError, ParseError, PipelineData,
-    PipelineExecutionData, ShellError, Span, Value,
+    PipelineExecutionData, ShellError, Signals, Span, Value,
     ast::Block,
     debugger::WithoutDebug,
     engine::{Command, EngineState, Stack, StateDelta, StateWorkingSet},
@@ -244,6 +244,28 @@ impl NuTester {
     pub fn env(mut self, key: impl Into<String>, val: impl Into<String>) -> Self {
         self.engine_state
             .add_env_var(key.into(), Value::test_string(val.into()));
+        self
+    }
+
+    /// Set custom signals for the engine state.
+    ///
+    /// This allows tests to simulate interrupts by triggering the provided [`Signals`].
+    pub fn with_signals(mut self, signals: Signals) -> Self {
+        self.engine_state.set_signals(signals);
+        self
+    }
+
+    /// Register an additional command in the engine state.
+    ///
+    /// This is useful for tests that need custom commands, such as one that triggers an
+    /// interrupt or injects specific behavior.
+    pub fn add_command(mut self, command: impl Command + 'static) -> Self {
+        let mut working_set = StateWorkingSet::new(&self.engine_state);
+        working_set.add_decl(Box::new(command));
+        // Errors here are test setup failures; propagate via panic to give a clear signal
+        self.engine_state
+            .merge_delta(working_set.render())
+            .expect("failed to register test command");
         self
     }
 

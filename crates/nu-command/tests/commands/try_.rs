@@ -1,4 +1,5 @@
 use nu_test_support::nu;
+use nu_test_support::tester::test;
 
 #[test]
 fn try_succeed() {
@@ -408,4 +409,210 @@ fn try_wont_generate_extra_output() {
         "try { nu --testbin fail | is-empty } catch { 'here' }"
     );
     assert_eq!(actual.out, "here")
+}
+
+// ===========================================================================
+// Interrupt/SIGINT regression tests
+// ===========================================================================
+
+/// A command that triggers the interrupt flag when run.
+/// Used to deterministically test interrupt handling without actual SIGINT.
+#[derive(Clone)]
+struct TriggerInterrupt;
+
+impl nu_protocol::engine::Command for TriggerInterrupt {
+    fn name(&self) -> &str {
+        "trigger-interrupt"
+    }
+
+    fn description(&self) -> &str {
+        "Triggers an interrupt (for testing purposes)"
+    }
+
+    fn signature(&self) -> nu_protocol::Signature {
+        nu_protocol::Signature::build("trigger-interrupt").input_output_types(vec![(
+            nu_protocol::Type::Nothing,
+            nu_protocol::Type::Nothing,
+        )])
+    }
+
+    fn run(
+        &self,
+        engine_state: &nu_protocol::engine::EngineState,
+        _stack: &mut nu_protocol::engine::Stack,
+        _call: &nu_protocol::engine::Call<'_>,
+        _input: nu_protocol::PipelineData,
+    ) -> Result<nu_protocol::PipelineData, nu_protocol::ShellError> {
+        engine_state.signals().trigger();
+        Ok(nu_protocol::PipelineData::empty())
+    }
+}
+
+/// A command that records when it runs, via a shared `AtomicBool`.
+#[derive(Clone)]
+struct RecordRan(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl nu_protocol::engine::Command for RecordRan {
+    fn name(&self) -> &str {
+        "record-ran"
+    }
+
+    fn description(&self) -> &str {
+        "Sets a shared flag to record that this command ran (for testing purposes)"
+    }
+
+    fn signature(&self) -> nu_protocol::Signature {
+        nu_protocol::Signature::build("record-ran").input_output_types(vec![(
+            nu_protocol::Type::Nothing,
+            nu_protocol::Type::Nothing,
+        )])
+    }
+
+    fn run(
+        &self,
+        _engine_state: &nu_protocol::engine::EngineState,
+        _stack: &mut nu_protocol::engine::Stack,
+        _call: &nu_protocol::engine::Call<'_>,
+        _input: nu_protocol::PipelineData,
+    ) -> Result<nu_protocol::PipelineData, nu_protocol::ShellError> {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(nu_protocol::PipelineData::empty())
+    }
+}
+
+/// Deterministic test: verify the `finally` block runs when an interrupt
+/// (`ShellError::Interrupted`) is raised inside the `try` block.
+///
+/// This simulates the scenario where Ctrl+C / SIGINT is pressed while a
+/// long-running command runs inside `try { ... } finally { ... }`.
+#[test]
+fn try_finally_runs_on_interrupt() {
+    let finally_ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // Set up real signals so that `trigger-interrupt` actually sets the flag.
+    let interrupt = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let signals = nu_protocol::Signals::new(interrupt.clone());
+
+    // Evaluate: try { trigger-interrupt } finally { record-ran }
+    // `trigger-interrupt` sets the interrupt flag; the engine detects it and
+    // should run the finally block before propagating the error.
+    let result = test()
+        .with_signals(signals)
+        .add_command(TriggerInterrupt)
+        .add_command(RecordRan(finally_ran.clone()))
+        .run_raw("try { trigger-interrupt } finally { record-ran }");
+
+    // The evaluation should result in an error (the interrupt was propagated).
+    assert!(result.is_err(), "expected error after interrupt");
+
+    // The finally block must have run.
+    assert!(
+        finally_ran.load(std::sync::atomic::Ordering::SeqCst),
+        "finally block should run when the try block is interrupted"
+    );
+}
+
+/// Variant: verify the `finally` block runs when interrupted inside a
+/// `try { ... } catch { ... } finally { ... }` construct.
+///
+/// The interrupt should bypass the catch block and go directly to finally.
+#[test]
+fn try_catch_finally_finally_runs_on_interrupt() {
+    let finally_ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let catch_ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let interrupt = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let signals = nu_protocol::Signals::new(interrupt.clone());
+
+    let result = test()
+        .with_signals(signals)
+        .add_command(TriggerInterrupt)
+        .add_command(RecordRan(finally_ran.clone()))
+        .add_command({
+            // Re-use RecordRan with a different flag for the catch block
+            #[derive(Clone)]
+            struct RecordCatchRan(std::sync::Arc<std::sync::atomic::AtomicBool>);
+            impl nu_protocol::engine::Command for RecordCatchRan {
+                fn name(&self) -> &str {
+                    "record-catch-ran"
+                }
+                fn description(&self) -> &str {
+                    "Records that catch ran"
+                }
+                fn signature(&self) -> nu_protocol::Signature {
+                    nu_protocol::Signature::build("record-catch-ran").input_output_types(vec![(
+                        nu_protocol::Type::Nothing,
+                        nu_protocol::Type::Nothing,
+                    )])
+                }
+                fn run(
+                    &self,
+                    _: &nu_protocol::engine::EngineState,
+                    _: &mut nu_protocol::engine::Stack,
+                    _: &nu_protocol::engine::Call<'_>,
+                    _: nu_protocol::PipelineData,
+                ) -> Result<nu_protocol::PipelineData, nu_protocol::ShellError> {
+                    self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+                    Ok(nu_protocol::PipelineData::empty())
+                }
+            }
+            RecordCatchRan(catch_ran.clone())
+        })
+        .run_raw("try { trigger-interrupt } catch { record-catch-ran } finally { record-ran }");
+
+    assert!(result.is_err(), "expected error after interrupt");
+    assert!(
+        finally_ran.load(std::sync::atomic::Ordering::SeqCst),
+        "finally block should run when interrupted (even with catch clause)"
+    );
+    // Interrupt bypasses catch, so catch should not have run
+    assert!(
+        !catch_ran.load(std::sync::atomic::Ordering::SeqCst),
+        "catch block should not run for interrupt (interrupt bypasses catch)"
+    );
+}
+
+/// On Unix: integration test using real SIGINT sent from the test process.
+///
+/// This tests the full end-to-end path: a nu script runs `sleep` (which polls
+/// for signals internally), the test sends SIGINT to the nu subprocess, and the
+/// `finally` block should still execute.
+#[cfg(unix)]
+#[test]
+fn try_finally_runs_when_script_receives_sigint() {
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+
+    let nu_binary = nu_test_support::fs::executable_path();
+    // Use the builtin `sleep` command: it periodically checks for interrupts,
+    // so it will reliably detect a SIGINT delivered to the process.
+    let script = "try { sleep 5sec } finally { print 'finally_ran' }";
+
+    let child = Command::new(nu_binary)
+        .args(["--no-config-file", "--commands", script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn nu subprocess");
+
+    // Allow the script to start and reach the `sleep` command.
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Send SIGINT to the nu subprocess from the test process.
+    // Using `kill -2 <pid>` (SIGINT) via the external kill utility.
+    let _status = Command::new("kill")
+        .args(["-2", &child.id().to_string()])
+        .status()
+        .expect("failed to send SIGINT to nu subprocess");
+
+    // Wait for the subprocess to finish (it should exit promptly after interrupt).
+    let output = child
+        .wait_with_output()
+        .expect("failed to wait for nu subprocess");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        stdout.contains("finally_ran"),
+        "finally block should run when the script receives SIGINT; stdout was: {stdout:?}"
+    );
 }
