@@ -655,8 +655,8 @@ fn try_finally_runs_when_script_receives_sigint() {
 
     // Allow the subprocess to start up and reach the `sleep` command before
     // sending the signal.  500ms is conservative and still fast enough for CI.
-    const SUBPROCESS_STARTUP_DELAY: Duration = Duration::from_millis(500);
-    std::thread::sleep(SUBPROCESS_STARTUP_DELAY);
+    const STARTUP_DELAY: Duration = Duration::from_millis(500);
+    std::thread::sleep(STARTUP_DELAY);
 
     // Send SIGINT to the nu subprocess from the test process.
     // Using `kill -2 <pid>` (SIGINT) via the external kill utility.
