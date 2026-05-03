@@ -676,3 +676,66 @@ fn try_finally_runs_when_script_receives_sigint() {
         "finally block should run when the script receives SIGINT; stdout was: {stdout:?}"
     );
 }
+
+/// Integration test: `finally` runs when Ctrl+C interrupts an external command (`^sleep`).
+///
+/// This is the scenario from the original bug report: pressing Ctrl+C while an
+/// external process runs inside a `try { } finally { }` block should still
+/// execute the `finally` block.
+///
+/// In a real terminal, Ctrl+C sends SIGINT to the entire foreground process
+/// group, which includes both nu and any external child processes.  This test
+/// reproduces that by:
+///  1. Spawning nu in its own process group (via `process_group(0)`).
+///  2. Sending SIGINT to that entire process group with `kill -2 -<pgid>`,
+///     which kills the external `^sleep` child and notifies nu simultaneously.
+///  3. Asserting that the `finally` block still executed.
+#[cfg(unix)]
+#[test]
+fn try_finally_runs_when_external_command_receives_sigint() {
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+
+    let nu_binary = nu_test_support::fs::executable_path();
+    // Use `^sleep` (the external OS sleep utility) to simulate the user's
+    // exact scenario: `try { ^sleep 3 } finally { print "finally run" }`.
+    let script = "try { ^sleep 30 } finally { print 'finally_ran' }";
+
+    // Spawn nu in a new process group so that sending SIGINT to that group
+    // does not also affect the test process itself.
+    let child = Command::new(&nu_binary)
+        .args(["--no-config-file", "--commands", script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        // process_group(0) puts the new process in its own group whose
+        // PGID equals the child's PID.
+        .process_group(0)
+        .spawn()
+        .expect("failed to spawn nu subprocess");
+
+    let nu_pid = child.id();
+
+    // Give nu enough time to start and launch `^sleep` before we signal.
+    const STARTUP_DELAY: Duration = Duration::from_millis(500);
+    std::thread::sleep(STARTUP_DELAY);
+
+    // Send SIGINT to the *entire process group* (nu + external sleep child).
+    // A negative argument to `kill` denotes a process group ID.
+    let _status = Command::new("kill")
+        .args(["-2", &format!("-{nu_pid}")])
+        .status()
+        .expect("failed to send SIGINT to nu process group");
+
+    // The subprocess should exit promptly once the signal is processed.
+    let output = child
+        .wait_with_output()
+        .expect("failed to wait for nu subprocess");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        stdout.contains("finally_ran"),
+        "finally block should run when Ctrl+C interrupts an external command; \
+         stdout was: {stdout:?}"
+    );
+}
