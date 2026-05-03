@@ -411,9 +411,14 @@ impl Instruction {
         span: &Span,
     ) -> Result<(), ShellError> {
         match self {
-            Instruction::Jump { .. } | Instruction::Return { .. } => {
-                engine_state.signals().check(span)
-            }
+            Instruction::Jump { .. }
+            | Instruction::Return { .. }
+            // TryCollect runs *before* PopErrorHandler, so checking here ensures an interrupt
+            // is detected while the catch/finally handlers are still on the stack (i.e., before
+            // PopErrorHandler removes them).  Without this, interrupts that occur inside the try
+            // body are only detected at Jump/Return – after PopErrorHandler has already fired –
+            // which means the catch block can never be reached on Ctrl+C.
+            | Instruction::TryCollect { .. } => engine_state.signals().check(span),
             _ => Ok(()),
         }
     }

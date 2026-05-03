@@ -560,19 +560,77 @@ fn try_catch_finally_finally_runs_on_interrupt() {
         })
         .run_raw("try { trigger-interrupt } catch { record-catch-ran } finally { record-ran }");
 
-    assert!(result.is_err(), "expected error after interrupt");
+    assert!(
+        result.is_ok(),
+        "catch handled the interrupt, so overall result should be Ok"
+    );
+    assert!(
+        catch_ran.load(std::sync::atomic::Ordering::SeqCst),
+        "catch block should run when interrupted"
+    );
     assert!(
         finally_ran.load(std::sync::atomic::Ordering::SeqCst),
-        "finally block should run when interrupted (even with catch clause)"
-    );
-    // Interrupt bypasses catch, so catch should not have run
-    assert!(
-        !catch_ran.load(std::sync::atomic::Ordering::SeqCst),
-        "catch block should not run for interrupt (interrupt bypasses catch)"
+        "finally block should run after catch handles the interrupt"
     );
 }
 
-/// On Unix: integration test using real SIGINT sent from the test process.
+/// Verify that a `catch` block (without `finally`) runs when an interrupt occurs inside `try`.
+///
+/// This is the regression case from issue #18090 reported as "catch doesn't work":
+/// pressing Ctrl+C should allow the `catch` block to execute and handle the error.
+#[test]
+fn try_catch_runs_on_interrupt() {
+    let catch_ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let interrupt = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let signals = nu_protocol::Signals::new(interrupt.clone());
+
+    // Re-use RecordRan with a different name for the catch block
+    #[derive(Clone)]
+    struct RecordCatchRan2(std::sync::Arc<std::sync::atomic::AtomicBool>);
+    impl nu_protocol::engine::Command for RecordCatchRan2 {
+        fn name(&self) -> &str {
+            "record-catch-ran2"
+        }
+        fn description(&self) -> &str {
+            "Records that catch ran (no-finally variant)"
+        }
+        fn signature(&self) -> nu_protocol::Signature {
+            nu_protocol::Signature::build("record-catch-ran2").input_output_types(vec![(
+                nu_protocol::Type::Nothing,
+                nu_protocol::Type::Nothing,
+            )])
+        }
+        fn run(
+            &self,
+            _: &nu_protocol::engine::EngineState,
+            _: &mut nu_protocol::engine::Stack,
+            _: &nu_protocol::engine::Call<'_>,
+            _: nu_protocol::PipelineData,
+        ) -> Result<nu_protocol::PipelineData, nu_protocol::ShellError> {
+            self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(nu_protocol::PipelineData::empty())
+        }
+    }
+
+    let result = test()
+        .with_signals(signals)
+        .add_command(TriggerInterrupt)
+        .add_command(RecordCatchRan2(catch_ran.clone()))
+        .run_raw("try { trigger-interrupt } catch { record-catch-ran2 }");
+
+    // Catch handled the interrupt, so the overall result is Ok.
+    assert!(
+        result.is_ok(),
+        "catch handled the interrupt, so overall result should be Ok"
+    );
+    assert!(
+        catch_ran.load(std::sync::atomic::Ordering::SeqCst),
+        "catch block should run when the try block is interrupted"
+    );
+}
+
+/// Integration test for SIGINT handling.
 ///
 /// This tests the full end-to-end path: a nu script runs `sleep` (which polls
 /// for signals internally), the test sends SIGINT to the nu subprocess, and the
@@ -595,8 +653,10 @@ fn try_finally_runs_when_script_receives_sigint() {
         .spawn()
         .expect("failed to spawn nu subprocess");
 
-    // Allow the script to start and reach the `sleep` command.
-    std::thread::sleep(Duration::from_millis(300));
+    // Allow the subprocess to start up and reach the `sleep` command before
+    // sending the signal.  500ms is conservative and still fast enough for CI.
+    const SUBPROCESS_STARTUP_DELAY: Duration = Duration::from_millis(500);
+    std::thread::sleep(SUBPROCESS_STARTUP_DELAY);
 
     // Send SIGINT to the nu subprocess from the test process.
     // Using `kill -2 <pid>` (SIGINT) via the external kill utility.

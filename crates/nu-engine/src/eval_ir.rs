@@ -299,26 +299,14 @@ fn eval_ir_block_impl<D: DebugContext>(
                     return Err(err);
                 }
             }
-            // Interrupted (Ctrl+C/SIGINT) behaves like Return/Exit: it bypasses catch blocks
-            // and goes directly to the finally block. This ensures `finally` always runs on
-            // interrupt, consistent with other languages' semantics.
-            Err(err @ ShellError::Interrupted { .. }) => {
-                if let Some(always_run_handler) =
-                    ctx.stack.finally_run_handlers.pop(ctx.finally_handler_base)
-                {
-                    // Reset the interrupt flag so the finally block can run.
-                    ctx.engine_state.signals().reset();
-                    prepare_error_handler(ctx, always_run_handler, None);
-                    pc = always_run_handler.handler_index;
-                    ret_val = Some(err);
-                } else {
-                    // No finally handler; propagate the interrupt
-                    return Err(err);
-                }
-            }
             Err(err) => {
                 if let Some(error_handler) = ctx.stack.error_handlers.pop(ctx.error_handler_base) {
-                    // If an error handler is set, branch there
+                    // If an error handler is set, branch there.
+                    // Reset the interrupt flag so the catch block can execute even if a
+                    // Ctrl+C/SIGINT occurred while the try block was running (otherwise
+                    // check_interrupt would fire at the catch block's first instruction and kill
+                    // it before it could do anything).
+                    ctx.engine_state.signals().reset();
                     prepare_error_handler(ctx, error_handler, Some(err.into_spanned(*span)));
                     pc = error_handler.handler_index;
                 } else if let Some(always_run_handler) =
