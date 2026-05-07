@@ -65,6 +65,7 @@ fn print_created_paths() {
 
         assert!(files_exist_at(&["dir_1", "dir_2", "dir_3"], dirs.test()));
 
+        assert!(actual.out.contains("created directory"));
         assert!(actual.out.contains("dir_1"));
         assert!(actual.out.contains("dir_2"));
         assert!(actual.out.contains("dir_3"));

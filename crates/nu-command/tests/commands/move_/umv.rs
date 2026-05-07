@@ -718,3 +718,22 @@ fn mv_with_tilde() {
         assert!(files_exist_at(&["f1.txt"], dirs.test()));
     })
 }
+
+#[test]
+fn mv_verbose_message_mentions_source_and_destination() {
+    Playground::setup("umv_verbose_message", |dirs, sandbox| {
+        sandbox.with_files(&[EmptyFile("before.txt")]);
+
+        let actual = nu!(
+            cwd: dirs.test(),
+            "mv -v before.txt after.txt"
+        );
+
+        assert!(actual.err.is_empty());
+        assert!(actual.out.contains("before.txt"));
+        assert!(actual.out.contains("after.txt"));
+        assert!(actual.out.contains("renamed"));
+        assert!(dirs.test().join("after.txt").exists());
+        assert!(!dirs.test().join("before.txt").exists());
+    });
+}
