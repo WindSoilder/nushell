@@ -1,3 +1,4 @@
+use nu_test_support::fs::Stub::EmptyFile;
 use nu_test_support::fs::files_exist_at;
 use nu_test_support::nu;
 use nu_test_support::playground::Playground;
@@ -188,5 +189,24 @@ fn mkdir_with_interpolation() {
 
         // Should not create a literal directory named "($in)"
         assert!(!dirs.test().join("xxx/($in)").exists());
+    })
+}
+
+#[test]
+fn mkdir_continues_creating_valid_directories_after_error() {
+    Playground::setup("mkdir_continues_after_error", |dirs, sandbox| {
+        sandbox.with_files(&[EmptyFile("blocker")]);
+
+        let actual = nu!(
+            cwd: dirs.test(),
+            "mkdir created_first blocker/child created_last"
+        );
+
+        assert!(actual.err.contains("Not a directory"));
+        assert!(files_exist_at(
+            &["created_first", "created_last"],
+            dirs.test()
+        ));
+        assert!(!dirs.test().join("blocker/child").exists());
     })
 }

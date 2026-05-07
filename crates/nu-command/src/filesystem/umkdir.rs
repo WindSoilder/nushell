@@ -1,5 +1,5 @@
 use nu_engine::command_prelude::*;
-use nu_protocol::{NuGlob, shell_error::generic::GenericError};
+use nu_protocol::{NuGlob, report_shell_error, shell_error::generic::GenericError};
 use uu_mkdir::mkdir;
 use uucore::{localized_help_template, translate};
 
@@ -90,13 +90,25 @@ impl Command for UMkdir {
         };
 
         let mut verbose_out = String::new();
+        let mut cmd_result = Ok(());
         for dir in directories {
+            engine_state.signals().check(&call.head)?;
+
             if let Err(error) = mkdir(&dir, &config) {
-                return Err(ShellError::Generic(GenericError::new_internal(
+                let err = ShellError::Generic(GenericError::new_internal(
                     format!("{error}"),
                     translate!(&error.to_string()),
-                )));
+                ));
+
+                if cmd_result.is_ok() {
+                    cmd_result = Err(err);
+                } else {
+                    report_shell_error(Some(stack), engine_state, &err);
+                }
+
+                continue;
             }
+
             if is_verbose {
                 verbose_out.push_str(
                     format!(
@@ -110,6 +122,8 @@ impl Command for UMkdir {
                 );
             }
         }
+
+        cmd_result?;
 
         if is_verbose {
             Ok(PipelineData::value(
