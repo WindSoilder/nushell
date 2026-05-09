@@ -1,5 +1,5 @@
 use nu_engine::command_prelude::*;
-use nu_protocol::{NuGlob, shell_error::generic::GenericError};
+use nu_protocol::{NuGlob, report_shell_error, shell_error::generic::GenericError};
 use uu_mkdir::mkdir;
 use uucore::{localized_help_template, translate};
 
@@ -85,7 +85,6 @@ impl Command for UMkdir {
         let mut directories = call
             .rest::<Spanned<NuGlob>>(engine_state, stack, 0)?
             .into_iter()
-            .map(|dir| nu_path::expand_path_with(dir.item.as_ref(), &cwd, dir.item.is_expand()))
             .peekable();
 
         let is_verbose = call.has_flag(engine_state, stack, "verbose")?;
@@ -106,12 +105,15 @@ impl Command for UMkdir {
         };
 
         let mut verbose_out = Vec::new();
+        let mut cmd_result = Ok(PipelineData::empty());
         for dir in directories {
-            if let Err(error) = mkdir(&dir, &config) {
+            let expanded = nu_path::expand_path_with(dir.item.as_ref(), &cwd, dir.item.is_expand());
+
+            if let Err(error) = mkdir(&expanded, &config) {
                 if is_verbose {
                     verbose_out.push(
                         record! {
-                            "path" => Value::string(dir.display().to_string(), call.head),
+                            "path" => Value::string(expanded.display().to_string(), call.head),
                             "created" => Value::bool(false, call.head),
                             "error" => Value::error(ShellError::Generic(GenericError::new_internal(
                                 format!("{error}"),
@@ -121,15 +123,22 @@ impl Command for UMkdir {
                         .into_value(call.head),
                     )
                 } else {
-                    return Err(ShellError::Generic(GenericError::new_internal(
+                    let err = ShellError::Generic(GenericError::new(
                         format!("{error}"),
                         translate!(&error.to_string()),
-                    )));
+                        dir.span,
+                    ));
+
+                    if cmd_result.is_ok() {
+                        cmd_result = Err(err);
+                    } else {
+                        report_shell_error(Some(stack), engine_state, &err);
+                    }
                 }
             } else if is_verbose {
                 verbose_out.push(
                     record! {
-                        "path" => Value::string(dir.display().to_string(), call.head),
+                        "path" => Value::string(expanded.display().to_string(), call.head),
                         "created" => Value::bool(true, call.head),
                         "error" => Value::nothing(call.head),
                     }
@@ -144,7 +153,7 @@ impl Command for UMkdir {
                 None,
             ))
         } else {
-            Ok(PipelineData::empty())
+            cmd_result
         }
     }
 

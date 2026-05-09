@@ -190,3 +190,20 @@ fn mkdir_with_interpolation() {
         assert!(!dirs.test().join("xxx/($in)").exists());
     })
 }
+
+#[test]
+fn mkdir_completes_other_arguments_after_failure() {
+    Playground::setup("mkdir_partial_failure", |dirs, sandbox| {
+        sandbox.with_files(&[nu_test_support::fs::Stub::EmptyFile("blocking_file")]);
+
+        let actual = nu!(
+            cwd: dirs.test(),
+            "mkdir after_one blocking_file after_two"
+        );
+
+        assert!(actual.err.contains("Already exists"));
+        assert!(dirs.test().join("after_one").exists());
+        assert!(dirs.test().join("after_two").exists());
+        assert!(!dirs.test().join("blocking_file").is_dir());
+    })
+}

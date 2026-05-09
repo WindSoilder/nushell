@@ -206,6 +206,7 @@ fn rm(
 
     let (mut target_exists, mut empty_span) = (false, call.head);
     let mut all_targets: HashMap<PathBuf, Span> = HashMap::new();
+    let mut cmd_result = Ok(PipelineData::empty());
 
     let glob_options = if all {
         None
@@ -240,7 +241,7 @@ fn rm(
                 .map(|m| m.file_type().is_symlink())
                 .unwrap_or(false)
             {
-                return Err(ShellError::Generic(
+                let err = ShellError::Generic(
                     GenericError::new(
                         format!("Cannot remove `{}`: is a directory", raw),
                         "is a directory",
@@ -250,18 +251,30 @@ fn rm(
                         "use `rm {}` without the trailing slash to remove the symlink itself",
                         without_sep
                     )),
-                ));
+                );
+                if cmd_result.is_ok() {
+                    cmd_result = Err(err);
+                } else {
+                    report_shell_error(Some(stack), engine_state, &err);
+                }
+                continue;
             }
         }
 
         if currentdir_path.to_string_lossy() == path.to_string_lossy()
             || currentdir_path.starts_with(format!("{}{}", target.item, std::path::MAIN_SEPARATOR))
         {
-            return Err(ShellError::Generic(GenericError::new(
+            let err = ShellError::Generic(GenericError::new(
                 "Cannot remove any parent directory",
                 "cannot remove any parent directory",
                 target.span,
-            )));
+            ));
+            if cmd_result.is_ok() {
+                cmd_result = Err(err);
+            } else {
+                report_shell_error(Some(stack), engine_state, &err);
+            }
+            continue;
         }
 
         match nu_engine::glob_from(
@@ -296,11 +309,16 @@ fn rm(
                                 .or_insert_with(|| target.span);
                         }
                         Err(e) => {
-                            return Err(ShellError::Generic(GenericError::new(
+                            let err = ShellError::Generic(GenericError::new(
                                 format!("Could not remove {:}", path.to_string_lossy()),
                                 e.to_string(),
                                 target.span,
-                            )));
+                            ));
+                            if cmd_result.is_ok() {
+                                cmd_result = Err(err);
+                            } else {
+                                report_shell_error(Some(stack), engine_state, &err);
+                            }
                         }
                     }
                 }
@@ -322,13 +340,21 @@ fn rm(
                         })
                     ))
                 {
-                    return Err(e);
+                    if cmd_result.is_ok() {
+                        cmd_result = Err(e);
+                    } else {
+                        report_shell_error(Some(stack), engine_state, &e);
+                    }
                 }
             }
         };
     }
 
-    if all_targets.is_empty() && !force {
+    if all_targets.is_empty() {
+        if cmd_result.is_err() || force {
+            return cmd_result;
+        }
+
         return Err(ShellError::Generic(GenericError::new(
             "File(s) not found",
             "File(s) not found",
@@ -462,7 +488,6 @@ fn rm(
         }
     });
 
-    let mut cmd_result = Ok(PipelineData::empty());
     for result in iter {
         engine_state.signals().check(&call.head)?;
         match result {

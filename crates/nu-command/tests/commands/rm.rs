@@ -143,6 +143,27 @@ fn errors_if_attempting_to_delete_a_directory_with_content_without_recursive_fla
 }
 
 #[test]
+fn rm_continues_removing_other_arguments_after_failure() {
+    Playground::setup("rm_partial_failure", |dirs, sandbox| {
+        sandbox
+            .within("non_empty")
+            .with_files(&[EmptyFile("nested.txt")])
+            .within(".")
+            .with_files(&[EmptyFile("delete_me_1.txt"), EmptyFile("delete_me_2.txt")]);
+
+        let actual = nu!(
+            cwd: dirs.test(),
+            "rm non_empty delete_me_1.txt delete_me_2.txt"
+        );
+
+        assert!(actual.err.contains("cannot remove non-empty directory"));
+        assert!(dirs.test().join("non_empty").exists());
+        assert!(!dirs.test().join("delete_me_1.txt").exists());
+        assert!(!dirs.test().join("delete_me_2.txt").exists());
+    })
+}
+
+#[test]
 fn errors_if_attempting_to_delete_home() {
     Playground::setup("rm_test_8", |dirs, _| {
         let actual = nu!(
