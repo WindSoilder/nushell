@@ -1,5 +1,6 @@
 use fancy_regex::Regex;
 use nu_engine::command_prelude::*;
+use nu_protocol::ByteStreamType;
 
 use std::collections::BTreeMap;
 use std::{fmt, str};
@@ -105,6 +106,12 @@ fn stats(
     if let PipelineData::Empty = input {
         return Err(ShellError::PipelineEmpty { dst_span: span });
     }
+
+    if let PipelineData::ByteStream(stream, metadata) = input {
+        return stream_stats(stream, span)
+            .map(|value| value.into_pipeline_data_with_metadata(metadata));
+    }
+
     input.map(
         move |v| {
             let value_span = v.span();
@@ -131,6 +138,33 @@ fn stats(
     )
 }
 
+fn stream_stats(stream: nu_protocol::ByteStream, span: Span) -> Result<Value, ShellError> {
+    match stream.type_() {
+        ByteStreamType::Binary | ByteStreamType::Unknown => {
+            return Err(ShellError::OnlySupportsThisInputType {
+                exp_input_type: "string".into(),
+                wrong_type: stream.type_().describe().into(),
+                dst_span: span,
+                src_span: stream.span(),
+            });
+        }
+        ByteStreamType::String => {}
+    }
+
+    let Some(chunks) = stream.chunks() else {
+        return Ok(counter("", span));
+    };
+
+    let mut counts = StreamCounts::default();
+
+    for value in chunks {
+        let chunk = value?.into_string()?;
+        counts.update(&chunk);
+    }
+
+    Ok(counts.into_value(span))
+}
+
 fn counter(contents: &str, span: Span) -> Value {
     let counts = uwc_count(&ALL_COUNTERS[..], contents);
 
@@ -148,6 +182,151 @@ fn counter(contents: &str, span: Span) -> Value {
     };
 
     Value::record(record, span)
+}
+
+#[derive(Default)]
+struct StreamCounts {
+    total_bytes: usize,
+    total_lines: usize,
+    total_words: usize,
+    total_chars: usize,
+    total_graphemes: usize,
+    total_unicode_width: usize,
+    total_nonempty: bool,
+    tail: String,
+}
+
+impl StreamCounts {
+    fn update(&mut self, chunk: &str) {
+        let mut combined = String::with_capacity(self.tail.len().saturating_add(chunk.len()));
+        combined.push_str(&self.tail);
+        combined.push_str(chunk);
+
+        self.total_nonempty |= !combined.is_empty();
+
+        let stable_end = stable_prefix_end(&combined);
+        let stable = &combined[..stable_end];
+        let tail = &combined[stable_end..];
+
+        self.add_stable(stable);
+        self.tail.clear();
+        self.tail.push_str(tail);
+    }
+
+    fn add_stable(&mut self, stable: &str) {
+        if stable.is_empty() {
+            return;
+        }
+
+        let stable_counts = uwc_count(
+            &[
+                Counter::Words,
+                Counter::Bytes,
+                Counter::CodePoints,
+                Counter::GraphemeClusters,
+                Counter::UnicodeWidth,
+            ],
+            stable,
+        );
+
+        self.total_bytes += stable_counts.get(&Counter::Bytes).copied().unwrap_or(0);
+        self.total_words += stable_counts.get(&Counter::Words).copied().unwrap_or(0);
+        self.total_chars += stable_counts
+            .get(&Counter::CodePoints)
+            .copied()
+            .unwrap_or(0);
+        self.total_graphemes += stable_counts
+            .get(&Counter::GraphemeClusters)
+            .copied()
+            .unwrap_or(0);
+        self.total_unicode_width += stable_counts
+            .get(&Counter::UnicodeWidth)
+            .copied()
+            .unwrap_or(0);
+        self.total_lines += count_line_endings(stable);
+    }
+
+    fn into_value(mut self, span: Span) -> Value {
+        self.add_stable(&self.tail.clone());
+
+        let lines = if !self.total_nonempty {
+            0
+        } else if has_line_ending_suffix(&self.tail) {
+            self.total_lines
+        } else {
+            self.total_lines + 1
+        };
+
+        let record = record! {
+            "lines" => Value::int(lines as i64, span),
+            "words" => Value::int(self.total_words as i64, span),
+            "bytes" => Value::int(self.total_bytes as i64, span),
+            "chars" => Value::int(self.total_chars as i64, span),
+            "graphemes" => Value::int(self.total_graphemes as i64, span),
+            "unicode-width" => Value::int(self.total_unicode_width as i64, span),
+        };
+
+        Value::record(record, span)
+    }
+}
+
+fn stable_prefix_end(s: &str) -> usize {
+    if s.is_empty() {
+        return 0;
+    }
+
+    let mut stable_end = s
+        .grapheme_indices(true)
+        .next_back()
+        .map(|(idx, _)| idx)
+        .unwrap_or(0);
+
+    if let Some((idx, word)) = s.unicode_word_indices().next_back()
+        && idx + word.len() == s.len()
+    {
+        stable_end = stable_end.min(idx);
+    }
+
+    if stable_end > 0 && s.as_bytes()[stable_end] == b'\n' && s.as_bytes()[stable_end - 1] == b'\r'
+    {
+        stable_end -= 1;
+    }
+
+    if s.ends_with('\r') {
+        stable_end = stable_end.min(s.len() - '\r'.len_utf8());
+    }
+
+    stable_end
+}
+
+fn count_line_endings(s: &str) -> usize {
+    const LF: &str = "\n";
+    const CR: &str = "\r";
+    const CRLF: &str = "\r\n";
+    const NEL: &str = "\u{0085}";
+    const FF: &str = "\u{000C}";
+    const LS: &str = "\u{2028}";
+    const PS: &str = "\u{2029}";
+
+    let line_ending_types = [CRLF, LF, CR, NEL, FF, LS, PS];
+    let pattern = &line_ending_types.join("|");
+    let newline_pattern = Regex::new(pattern).expect("Unable to create regex");
+
+    newline_pattern.find_iter(s).filter_map(Result::ok).count()
+}
+
+fn has_line_ending_suffix(s: &str) -> bool {
+    const LF: &str = "\n";
+    const CR: &str = "\r";
+    const CRLF: &str = "\r\n";
+    const NEL: &str = "\u{0085}";
+    const FF: &str = "\u{000C}";
+    const LS: &str = "\u{2028}";
+    const PS: &str = "\u{2029}";
+
+    [CRLF, LF, CR, NEL, FF, LS, PS]
+        .into_iter()
+        .any(|suffix| s.ends_with(suffix))
 }
 
 // /// Take all the counts in `other_counts` and sum them into `accum`.
