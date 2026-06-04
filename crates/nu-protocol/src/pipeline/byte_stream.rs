@@ -167,6 +167,8 @@ impl From<ByteStreamType> for Type {
 /// - [`reader`](ByteStream::reader): returns a [`Read`]-able type to get the raw bytes in the stream.
 /// - [`lines`](ByteStream::lines): splits the bytes on lines and returns an [`Iterator`]
 ///   where each item is a `Result<String, ShellError>`.
+/// - [`strings`](ByteStream::strings): parses the bytes as UTF-8 and returns an [`Iterator`]
+///   where each item is a `Result<String, ShellError>`.
 /// - [`chunks`](ByteStream::chunks): returns an [`Iterator`] of [`Value`]s where each value is
 ///   either a string or binary.
 ///   Try not to use this method if possible. Rather, please use [`reader`](ByteStream::reader)
@@ -510,6 +512,18 @@ impl ByteStream {
             signals: self.signals,
             strict: false,
         })
+    }
+
+    /// Convert the [`ByteStream`] into a [`Strings`] iterator where each element is a `Result<String, ShellError>`.
+    ///
+    /// Each item contains valid UTF-8 bytes from the stream. New lines are preserved. If the
+    /// stream fails to decode as UTF-8, then the iterator returns a [`ShellError`].
+    ///
+    /// If the source of the [`ByteStream`] is [`ByteStreamSource::Child`] and the child has no stdout,
+    /// then the stream is considered empty and `None` will be returned.
+    pub fn strings(self) -> Option<Strings> {
+        let reader = self.stream.reader()?;
+        Some(Strings::new(reader, self.span, self.signals))
     }
 
     /// Convert the [`ByteStream`] into a [`SplitRead`] iterator where each element is a `Result<String, ShellError>`.
@@ -890,6 +904,49 @@ impl Iterator for Lines {
     }
 }
 
+pub struct Strings {
+    reader: BufReader<SourceReader>,
+    pos: u64,
+    error: bool,
+    span: Span,
+    signals: Signals,
+}
+
+impl Strings {
+    fn new(reader: SourceReader, span: Span, signals: Signals) -> Self {
+        Self {
+            reader: BufReader::new(reader),
+            pos: 0,
+            error: false,
+            span,
+            signals,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl Iterator for Strings {
+    type Item = Result<String, ShellError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.error || self.signals.interrupted() {
+            None
+        } else {
+            match next_utf8_string(&mut self.reader, &mut self.pos, self.span) {
+                Ok(Some(string)) => Some(Ok(string)),
+                Ok(None) => None,
+                Err((_, err)) => {
+                    self.error = true;
+                    Some(Err(err))
+                }
+            }
+        }
+    }
+}
+
 pub struct SplitRead {
     internal: SplitReadInner<BufReader<SourceReader>>,
     span: Span,
@@ -964,74 +1021,7 @@ impl Chunks {
     }
 
     fn next_string(&mut self) -> Result<Option<String>, (Vec<u8>, ShellError)> {
-        let from_io_error = |err: std::io::Error| match ShellErrorBridge::try_from(err) {
-            Ok(err) => err.0,
-            Err(err) => IoError::new(err, self.span, None).into(),
-        };
-
-        // Get some data from the reader
-        let buf = self
-            .reader
-            .fill_buf()
-            .map_err(from_io_error)
-            .map_err(|err| (vec![], err))?;
-
-        // If empty, this is EOF
-        if buf.is_empty() {
-            return Ok(None);
-        }
-
-        let mut buf = buf.to_vec();
-        let mut consumed = 0;
-
-        // If the buf length is under 4 bytes, it could be invalid, so try to get more
-        if buf.len() < 4 {
-            consumed += buf.len();
-            self.reader.consume(buf.len());
-            match self.reader.fill_buf() {
-                Ok(more_bytes) => buf.extend_from_slice(more_bytes),
-                Err(err) => return Err((buf, from_io_error(err))),
-            }
-        }
-
-        // Try to parse utf-8 and decide what to do
-        match String::from_utf8(buf) {
-            Ok(string) => {
-                self.reader.consume(string.len() - consumed);
-                self.pos += string.len() as u64;
-                Ok(Some(string))
-            }
-            Err(err) if err.utf8_error().error_len().is_none() => {
-                // There is some valid data at the beginning, and this is just incomplete, so just
-                // consume that and return it
-                let valid_up_to = err.utf8_error().valid_up_to();
-                if valid_up_to > consumed {
-                    self.reader.consume(valid_up_to - consumed);
-                }
-                let mut buf = err.into_bytes();
-                buf.truncate(valid_up_to);
-                buf.shrink_to_fit();
-                let string = String::from_utf8(buf)
-                    .expect("failed to parse utf-8 even after correcting error");
-                self.pos += string.len() as u64;
-                Ok(Some(string))
-            }
-            Err(err) => {
-                // There is an error at the beginning and we have no hope of parsing further.
-                let shell_error = ShellError::NonUtf8Custom {
-                    msg: format!("invalid utf-8 sequence starting at index {}", self.pos),
-                    span: self.span,
-                };
-                let buf = err.into_bytes();
-                // We are consuming the entire buf though, because we're returning it in case it
-                // will be cast to binary
-                if buf.len() > consumed {
-                    self.reader.consume(buf.len() - consumed);
-                }
-                self.pos += buf.len() as u64;
-                Err((buf, shell_error))
-            }
-        }
+        next_utf8_string(&mut self.reader, &mut self.pos, self.span)
     }
 }
 
@@ -1072,22 +1062,110 @@ impl Iterator for Chunks {
                 },
                 // For Unknown, we try to create strings, but we switch to binary mode if we
                 // fail
-                ByteStreamType::Unknown => {
-                    match self.next_string().transpose()? {
-                        Ok(string) => Some(Ok(Value::string(string, self.span))),
-                        Err((buf, _)) if !buf.is_empty() => {
-                            // Switch to binary mode
-                            self.type_ = ByteStreamType::Binary;
-                            Some(Ok(Value::binary(buf, self.span)))
-                        }
-                        Err((_, err)) => {
-                            self.error = true;
-                            Some(Err(err))
-                        }
+                ByteStreamType::Unknown => match self.next_string().transpose()? {
+                    Ok(string) => Some(Ok(Value::string(string, self.span))),
+                    Err((buf, _)) if !buf.is_empty() => {
+                        // Switch to binary mode
+                        self.type_ = ByteStreamType::Binary;
+                        Some(Ok(Value::binary(buf, self.span)))
                     }
+                    Err((_, err)) => {
+                        self.error = true;
+                        Some(Err(err))
+                    }
+                },
+            }
+        }
+    }
+}
+
+fn next_utf8_string(
+    reader: &mut BufReader<SourceReader>,
+    pos: &mut u64,
+    span: Span,
+) -> Result<Option<String>, (Vec<u8>, ShellError)> {
+    let from_io_error = |err: std::io::Error| shell_error_from_io_error(err, span);
+
+    // Get some data from the reader
+    let buf = reader
+        .fill_buf()
+        .map_err(from_io_error)
+        .map_err(|err| (vec![], err))?;
+
+    // If empty, this is EOF
+    if buf.is_empty() {
+        return Ok(None);
+    }
+
+    let mut buf = buf.to_vec();
+    let mut consumed = 0;
+
+    // If the buf length is under 4 bytes, it could be invalid, so try to get more
+    if buf.len() < 4 {
+        consumed += buf.len();
+        reader.consume(buf.len());
+        match reader.fill_buf() {
+            Ok(more_bytes) => buf.extend_from_slice(more_bytes),
+            Err(err) => return Err((buf, from_io_error(err))),
+        }
+    }
+
+    // Try to parse utf-8 and decide what to do
+    match String::from_utf8(buf) {
+        Ok(string) => {
+            reader.consume(string.len() - consumed);
+            *pos += string.len() as u64;
+            Ok(Some(string))
+        }
+        Err(err) if err.utf8_error().error_len().is_none() => {
+            // There is some valid data at the beginning, and this is just incomplete, so just
+            // consume that and return it
+            let valid_up_to = err.utf8_error().valid_up_to();
+            if valid_up_to > consumed {
+                reader.consume(valid_up_to - consumed);
+            }
+            let mut buf = err.into_bytes();
+            buf.truncate(valid_up_to);
+            buf.shrink_to_fit();
+            match String::from_utf8(buf) {
+                Ok(string) => {
+                    *pos += string.len() as u64;
+                    Ok(Some(string))
+                }
+                Err(err) => {
+                    let shell_error = non_utf8_error(*pos, span);
+                    let bytes = err.into_bytes();
+                    *pos += bytes.len() as u64;
+                    Err((bytes, shell_error))
                 }
             }
         }
+        Err(err) => {
+            // There is an error at the beginning and we have no hope of parsing further.
+            let shell_error = non_utf8_error(*pos, span);
+            let buf = err.into_bytes();
+            // We are consuming the entire buf though, because we're returning it in case it
+            // will be cast to binary
+            if buf.len() > consumed {
+                reader.consume(buf.len() - consumed);
+            }
+            *pos += buf.len() as u64;
+            Err((buf, shell_error))
+        }
+    }
+}
+
+fn non_utf8_error(pos: u64, span: Span) -> ShellError {
+    ShellError::NonUtf8Custom {
+        msg: format!("invalid utf-8 sequence starting at index {pos}"),
+        span,
+    }
+}
+
+fn shell_error_from_io_error(err: std::io::Error, span: Span) -> ShellError {
+    match ShellErrorBridge::try_from(err) {
+        Ok(err) => err.0,
+        Err(err) => IoError::new(err, span, None).into(),
     }
 }
 
@@ -1243,6 +1321,76 @@ mod tests {
             Signals::empty(),
             type_,
         )
+    }
+
+    fn test_strings<T>(data: Vec<T>) -> Strings
+    where
+        T: AsRef<[u8]> + Default + Send + 'static,
+    {
+        let reader = ReadIterator {
+            iter: data.into_iter(),
+            cursor: Some(Cursor::new(T::default())),
+        };
+        Strings::new(
+            SourceReader::Read(Box::new(reader)),
+            Span::test_data(),
+            Signals::empty(),
+        )
+    }
+
+    #[test]
+    fn strings_preserve_newlines() {
+        let stream = ByteStream::read_string(
+            "foo\nbar\r\n".to_string(),
+            Span::test_data(),
+            Signals::empty(),
+        );
+        let mut iter = stream.strings().expect("readable stream");
+
+        assert_eq!(
+            Some("foo\nbar\r\n".to_string()),
+            iter.next().transpose().expect("error")
+        );
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn strings_read_clean() {
+        let strs = vec!["Nushell", "が好きです"];
+        let iter = test_strings(strs.clone());
+
+        assert_eq!(strs, iter.collect::<Result<Vec<_>, _>>().expect("error"));
+    }
+
+    #[test]
+    fn strings_read_split_boundary() {
+        let real = "Nushell最高!";
+        let chunks = vec![&b"Nushell\xe6"[..], &b"\x9c\x80\xe9"[..], &b"\xab\x98!"[..]];
+        let iter = test_strings(chunks);
+
+        let string = iter.collect::<Result<Vec<_>, _>>().expect("error").join("");
+        assert_eq!(real, string);
+    }
+
+    #[test]
+    fn strings_read_utf8_error() {
+        let chunks = vec![&b"Nushell\xe6"[..], &b"\x9c\x80\xe9"[..], &b"\xab"[..]];
+        let iter = test_strings(chunks);
+
+        let mut string = String::new();
+        for item in iter {
+            match item {
+                Ok(chunk) => string.push_str(&chunk),
+                Err(err) => {
+                    println!("string so far: {string:?}");
+                    println!("got error: {err:?}");
+                    assert!(!string.is_empty());
+                    assert!(matches!(err, ShellError::NonUtf8Custom { .. }));
+                    return;
+                }
+            }
+        }
+        panic!("no error");
     }
 
     #[test]
