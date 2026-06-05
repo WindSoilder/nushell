@@ -101,62 +101,229 @@ fn stats(
     input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let span = call.head;
-    // This doesn't match explicit nulls
-    if let PipelineData::Empty = input {
-        return Err(ShellError::PipelineEmpty { dst_span: span });
+    match input {
+        // This doesn't match explicit nulls
+        PipelineData::Empty => Err(ShellError::PipelineEmpty { dst_span: span }),
+        PipelineData::ByteStream(stream, metadata) => {
+            Ok(byte_stream_counter(stream, span)?.into_pipeline_data_with_metadata(metadata))
+        }
+        input => input.map(
+            move |v| {
+                let value_span = v.span();
+                let type_ = v.get_type();
+                // First, obtain the span. If this fails, propagate the error that results.
+                if let Value::Error { error, .. } = v {
+                    return Value::error(*error, span);
+                }
+                // Now, check if it's a string.
+                match v.coerce_into_string() {
+                    Ok(s) => counter(&s, span),
+                    Err(_) => Value::error(
+                        ShellError::OnlySupportsThisInputType {
+                            exp_input_type: "string".into(),
+                            wrong_type: type_.to_string(),
+                            dst_span: span,
+                            src_span: value_span,
+                        },
+                        span,
+                    ),
+                }
+            },
+            engine_state.signals(),
+        ),
     }
-    input.map(
-        move |v| {
-            let value_span = v.span();
-            let type_ = v.get_type();
-            // First, obtain the span. If this fails, propagate the error that results.
-            if let Value::Error { error, .. } = v {
-                return Value::error(*error, span);
-            }
-            // Now, check if it's a string.
-            match v.coerce_into_string() {
-                Ok(s) => counter(&s, span),
-                Err(_) => Value::error(
-                    ShellError::OnlySupportsThisInputType {
-                        exp_input_type: "string".into(),
-                        wrong_type: type_.to_string(),
-                        dst_span: span,
-                        src_span: value_span,
-                    },
-                    span,
-                ),
-            }
-        },
-        engine_state.signals(),
-    )
 }
 
 fn counter(contents: &str, span: Span) -> Value {
     let counts = uwc_count(&ALL_COUNTERS[..], contents);
+    counts_to_value(&counts, span)
+}
 
+fn counts_to_value(counts: &BTreeMap<Counter, usize>, span: Span) -> Value {
     fn get_count(counts: &BTreeMap<Counter, usize>, counter: Counter, span: Span) -> Value {
         Value::int(counts.get(&counter).copied().unwrap_or(0) as i64, span)
     }
 
     let record = record! {
-        "lines" => get_count(&counts, Counter::Lines, span),
-        "words" => get_count(&counts, Counter::Words, span),
-        "bytes" => get_count(&counts, Counter::Bytes, span),
-        "chars" => get_count(&counts, Counter::CodePoints, span),
-        "graphemes" => get_count(&counts, Counter::GraphemeClusters, span),
-        "unicode-width" => get_count(&counts, Counter::UnicodeWidth, span),
+        "lines" => get_count(counts, Counter::Lines, span),
+        "words" => get_count(counts, Counter::Words, span),
+        "bytes" => get_count(counts, Counter::Bytes, span),
+        "chars" => get_count(counts, Counter::CodePoints, span),
+        "graphemes" => get_count(counts, Counter::GraphemeClusters, span),
+        "unicode-width" => get_count(counts, Counter::UnicodeWidth, span),
     };
 
     Value::record(record, span)
 }
 
-// /// Take all the counts in `other_counts` and sum them into `accum`.
-// pub fn sum_counts(accum: &mut Counted, other_counts: &Counted) {
-//     for (counter, count) in other_counts {
-//         let entry = accum.entry(*counter).or_insert(0);
-//         *entry += count;
-//     }
-// }
+fn byte_stream_counter(stream: ByteStream, span: Span) -> Result<Value, ShellError> {
+    let Some(strings) = stream.strings() else {
+        return Ok(counter("", span));
+    };
+
+    let mut counter = StreamingCounter::default();
+    for string in strings {
+        counter.push_str(&string?);
+    }
+
+    Ok(counts_to_value(&counter.finish(), span))
+}
+
+const STREAM_STATS_KEEP_BYTES: usize = 16 * 1024;
+const STREAM_STATS_FLUSH_BYTES: usize = STREAM_STATS_KEEP_BYTES * 2;
+
+#[derive(Default)]
+struct StreamingCounter {
+    pending: String,
+    words: usize,
+    graphemes: usize,
+    unicode_width: usize,
+    bytes: usize,
+    chars: usize,
+    line_counter: StreamingLineCounter,
+}
+
+impl StreamingCounter {
+    fn push_str(&mut self, value: &str) {
+        self.bytes += value.len();
+        self.chars += value.chars().count();
+        self.line_counter.push_str(value);
+        self.pending.push_str(value);
+        self.flush_pending(false);
+    }
+
+    fn finish(mut self) -> Counted {
+        self.flush_pending(true);
+
+        let mut counts = BTreeMap::new();
+        counts.insert(Counter::Lines, self.line_counter.finish());
+        counts.insert(Counter::Words, self.words);
+        counts.insert(Counter::Bytes, self.bytes);
+        counts.insert(Counter::CodePoints, self.chars);
+        counts.insert(Counter::GraphemeClusters, self.graphemes);
+        counts.insert(Counter::UnicodeWidth, self.unicode_width);
+        counts
+    }
+
+    fn flush_pending(&mut self, finish: bool) {
+        let split_at = if finish {
+            self.pending.len()
+        } else {
+            self.safe_split_len()
+        };
+
+        if split_at == 0 {
+            return;
+        }
+
+        let suffix = self.pending.split_off(split_at);
+        let prefix = std::mem::replace(&mut self.pending, suffix);
+        self.words += prefix.unicode_words().count();
+        self.graphemes += prefix.graphemes(true).count();
+        self.unicode_width += unicode_width::UnicodeWidthStr::width(prefix.as_str());
+    }
+
+    fn safe_split_len(&self) -> usize {
+        if self.pending.len() <= STREAM_STATS_FLUSH_BYTES {
+            return 0;
+        }
+
+        let max_split = floor_char_boundary(
+            self.pending.as_str(),
+            self.pending.len() - STREAM_STATS_KEEP_BYTES,
+        );
+        let mut previous_split = 0;
+        let mut split = 0;
+        let mut grapheme_boundaries = self.pending.grapheme_indices(true).map(|(idx, _)| idx);
+        let mut next_grapheme_boundary = grapheme_boundaries.next();
+
+        for (idx, _) in self.pending.split_word_bound_indices() {
+            if idx > max_split {
+                break;
+            }
+
+            while matches!(next_grapheme_boundary, Some(boundary) if boundary < idx) {
+                next_grapheme_boundary = grapheme_boundaries.next();
+            }
+
+            if next_grapheme_boundary == Some(idx) {
+                previous_split = split;
+                split = idx;
+            }
+        }
+
+        if split > 0 && self.pending[..split].ends_with('\r') {
+            previous_split
+        } else {
+            split
+        }
+    }
+}
+
+fn floor_char_boundary(value: &str, mut idx: usize) -> usize {
+    while !value.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+#[derive(Default)]
+struct StreamingLineCounter {
+    line_endings: usize,
+    saw_any: bool,
+    last_was_line_ending: bool,
+    pending_cr: bool,
+}
+
+impl StreamingLineCounter {
+    fn push_str(&mut self, value: &str) {
+        for ch in value.chars() {
+            self.saw_any = true;
+
+            if self.pending_cr {
+                if ch == '\n' {
+                    self.line_endings += 1;
+                    self.pending_cr = false;
+                    self.last_was_line_ending = true;
+                    continue;
+                }
+
+                self.line_endings += 1;
+                self.pending_cr = false;
+            }
+
+            match ch {
+                '\r' => {
+                    self.pending_cr = true;
+                    self.last_was_line_ending = true;
+                }
+                '\n' | '\u{0085}' | '\u{000C}' | '\u{2028}' | '\u{2029}' => {
+                    self.line_endings += 1;
+                    self.last_was_line_ending = true;
+                }
+                _ => {
+                    self.last_was_line_ending = false;
+                }
+            }
+        }
+    }
+
+    fn finish(mut self) -> usize {
+        if self.pending_cr {
+            self.line_endings += 1;
+            self.pending_cr = false;
+            self.last_was_line_ending = true;
+        }
+
+        if !self.saw_any {
+            0
+        } else if self.last_was_line_ending {
+            self.line_endings
+        } else {
+            self.line_endings + 1
+        }
+    }
+}
 
 // /// Sums all the `Counted` instances into a new one.
 // pub fn sum_all_counts<'a, I>(counts: I) -> Counted
@@ -310,6 +477,67 @@ fn test_one_newline() {
     correct_counts.insert(Counter::UnicodeWidth, 1);
 
     assert_eq!(correct_counts, counts);
+}
+
+#[test]
+fn byte_stream_stats_counts_string_stream() {
+    let span = Span::test_data();
+    let stream = ByteStream::from_iter(
+        vec![
+            b"foo ".to_vec(),
+            "bar\r".as_bytes().to_vec(),
+            "\nbaz".as_bytes().to_vec(),
+        ],
+        span,
+        nu_protocol::Signals::empty(),
+        ByteStreamType::String,
+    );
+
+    let value = byte_stream_counter(stream, span).expect("string stream should be counted");
+
+    assert_eq!(counter("foo bar\r\nbaz", span), value);
+}
+
+#[test]
+fn byte_stream_stats_rejects_unknown_stream() {
+    let span = Span::test_data();
+    let stream = ByteStream::from_iter(
+        vec![b"valid utf-8".to_vec()],
+        span,
+        nu_protocol::Signals::empty(),
+        ByteStreamType::Unknown,
+    );
+
+    let err = byte_stream_counter(stream, span).expect_err("unknown stream should be rejected");
+
+    assert!(matches!(
+        err,
+        ShellError::OnlySupportsThisInputType {
+            exp_input_type,
+            wrong_type,
+            ..
+        } if exp_input_type == "string stream" && wrong_type == "byte stream"
+    ));
+}
+
+#[test]
+fn streaming_counter_matches_whole_string_across_boundaries() {
+    let chunks = [
+        "foo\r",
+        "\nbar Ame",
+        "\u{301}lie ",
+        "今天天",
+        "气真好",
+        "\u{2028}done",
+    ];
+    let whole = chunks.join("");
+    let mut counter = StreamingCounter::default();
+
+    for chunk in chunks {
+        counter.push_str(chunk);
+    }
+
+    assert_eq!(uwc_count(&ALL_COUNTERS[..], &whole), counter.finish());
 }
 
 #[test]
