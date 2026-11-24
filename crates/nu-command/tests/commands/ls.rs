@@ -3,6 +3,102 @@ use pretty_assertions::assert_matches;
 use rstest::rstest;
 
 #[test]
+fn produces_a_schema_bearing_table_stream(playground: Playground) -> Result {
+    playground.empty_file("file.txt")?;
+
+    let mut tester = test().cwd(playground.path());
+    tester
+        .run("ls | describe --no-collect")
+        .expect_value_eq("table stream")?;
+    tester
+        .run("ls | columns")
+        .expect_value_eq(["name", "type", "size", "modified"])
+}
+
+#[test]
+fn empty_directory_keeps_the_ls_schema(playground: Playground) -> Result {
+    playground.dir("empty")?;
+
+    let mut tester = test().cwd(playground.path());
+    tester
+        .run("ls empty | describe --no-collect")
+        .expect_value_eq("table stream")?;
+    tester
+        .run("ls empty | columns")
+        .expect_value_eq(["name", "type", "size", "modified"])?;
+    tester.run("ls empty | length").expect_value_eq(0)
+}
+
+#[test]
+fn table_stream_preserves_ls_metadata(playground: Playground) -> Result {
+    playground.empty_file("file.txt")?;
+
+    let mut tester = test().cwd(playground.path());
+    tester
+        .run("ls | metadata | get path_columns.0")
+        .expect_value_eq("name")?;
+    tester
+        .run("ls | metadata | get table_width_priority_columns.0")
+        .expect_value_eq("name")
+}
+
+#[test]
+fn table_stream_works_with_get_select_and_table(playground: Playground) -> Result {
+    playground.empty_file("a.txt")?;
+    playground.empty_file("b.nu")?;
+
+    let mut tester = test().cwd(playground.path());
+    tester
+        .run("ls --du --mime-type --threads | select name type size | get name | sort")
+        .expect_value_eq(["a.txt", "b.nu"])?;
+
+    let rendered: String = tester
+        .run("$env.config.use_ansi_coloring = false; ls | table --theme basic --width 120")?;
+    assert!(rendered.contains("name"));
+    assert!(rendered.contains("a.txt"));
+    assert!(rendered.contains("b.nu"));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn long_table_stream_has_unix_columns(playground: Playground) -> Result {
+    playground.empty_file("file.txt")?;
+
+    test()
+        .cwd(playground.path())
+        .run("ls --long | columns")
+        .expect_value_eq([
+            "name",
+            "type",
+            "target",
+            "readonly",
+            "mode",
+            "num_links",
+            "inode",
+            "user",
+            "group",
+            "size",
+            "created",
+            "accessed",
+            "modified",
+        ])
+}
+
+#[cfg(not(unix))]
+#[test]
+fn long_table_stream_has_portable_columns(playground: Playground) -> Result {
+    playground.empty_file("file.txt")?;
+
+    test()
+        .cwd(playground.path())
+        .run("ls --long | columns")
+        .expect_value_eq([
+            "name", "type", "target", "readonly", "size", "created", "accessed", "modified",
+        ])
+}
+
+#[test]
 fn lists_regular_files(playground: Playground) -> Result {
     playground.empty_file("andres.txt")?;
     playground.empty_file("jt.txt")?;

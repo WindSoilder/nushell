@@ -198,3 +198,21 @@ fn no_headers_false_keeps_default_output(#[case] mode: &str) -> Result {
         .run(format!("{input} | table {mode} --no-headers=false"))
         .expect_value_eq(expected)
 }
+
+#[test]
+fn empty_table_stream_renders_declared_headers() -> Result {
+    test()
+        .run(r#""first_label,second_label\n" | from csv | table --theme markdown --index false"#)
+        .expect_value_eq("| first_label | second_label |\n")
+}
+
+#[test]
+fn table_stream_uses_declared_headers_on_every_page() -> Result {
+    let actual: String = test().run(
+        r#"$env.config.table.stream_page_size = 1
+        "first_label,second_label\n1,2\n3,4\n" | from csv | table --theme markdown --index false"#,
+    )?;
+    assert_eq!(actual.matches("first_label").count(), 2, "{actual}");
+    assert_eq!(actual.matches("second_label").count(), 2, "{actual}");
+    Ok(())
+}

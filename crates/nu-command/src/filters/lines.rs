@@ -83,6 +83,26 @@ impl Command for Lines {
 
                 Ok(PipelineData::list_stream(stream, metadata))
             }
+            PipelineData::TableStream(stream, metadata) => {
+                let iter = stream.into_iter().filter_map(move |value| {
+                    let span = value.span();
+                    match value {
+                        Value::String { val, .. } => Some(
+                            val.lines()
+                                .filter(|s| !skip_empty || !s.trim().is_empty())
+                                .map(|s| Value::string(s, span))
+                                .collect::<Vec<_>>(),
+                        ),
+                        Value::Error { .. } => Some(vec![value]),
+                        _ => None,
+                    }
+                });
+                Ok(iter.flatten().into_pipeline_data_with_metadata(
+                    head,
+                    engine_state.signals().clone(),
+                    metadata,
+                ))
+            }
             PipelineData::ByteStream(stream, ..) => {
                 if let Some(lines) = stream.lines().map(|l| l.strict(strict)) {
                     Ok(lines_to_pipeline_data(

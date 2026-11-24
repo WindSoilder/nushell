@@ -162,6 +162,22 @@ impl Command for Skip {
                 let metadata = metadata.map(|m| if n > 0 { m.with_content_type(None) } else { m });
                 Ok(Value::binary(bytes, input_span).into_pipeline_data_with_metadata(metadata))
             }
+            PipelineData::Value(
+                Value::Table {
+                    val, internal_span, ..
+                },
+                metadata,
+            ) => {
+                let columns = val.columns().to_vec();
+                let rows =
+                    skip_keeping_errors(val.into_owned().into_rows().into_iter(), n).collect();
+                Ok(Value::table_with_columns(columns, rows, internal_span)?
+                    .into_pipeline_data_with_metadata(metadata))
+            }
+            PipelineData::TableStream(stream, metadata) => Ok(PipelineData::table_stream(
+                stream.modify(move |iter| skip_keeping_errors(iter, n))?,
+                metadata,
+            )),
             mut input => {
                 let metadata = input.take_metadata();
                 Ok(skip_keeping_errors(input.into_iter_strict(call.head)?, n)

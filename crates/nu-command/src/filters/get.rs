@@ -335,6 +335,46 @@ pub fn follow_cell_path_into_stream(
 
             Ok(result)
         }
+        PipelineData::TableStream(stream, ..) if !has_int_member => {
+            if let Some(PathMember::String {
+                val,
+                optional,
+                casing,
+                span,
+            }) = cell_path.first()
+            {
+                let found = stream.columns().iter().any(|column| match casing {
+                    nu_protocol::casing::Casing::Sensitive => column == val,
+                    nu_protocol::casing::Casing::Insensitive => column.eq_ignore_ascii_case(val),
+                });
+                if !found && !optional {
+                    if let Some(suggestion) = nu_protocol::did_you_mean(stream.columns(), val) {
+                        return Err(ShellError::DidYouMean {
+                            suggestion,
+                            span: *span,
+                        });
+                    }
+                    return Err(ShellError::CantFindColumn {
+                        col_name: val.clone(),
+                        span: Some(*span),
+                        src_span: stream.span(),
+                    });
+                }
+            }
+            let result = stream
+                .into_iter()
+                .map(move |value| {
+                    let span = value.span();
+
+                    value
+                        .follow_cell_path(&cell_path)
+                        .map(Cow::into_owned)
+                        .unwrap_or_else(|error| Value::error(error, span))
+                })
+                .into_pipeline_data(head, signals);
+
+            Ok(result)
+        }
 
         _ => data
             .follow_cell_path(&cell_path, head)

@@ -263,6 +263,12 @@ impl BlockBuilder {
             Instruction::ListSpread { src_dst, items } => {
                 allocate(&[*src_dst, *items], &[*src_dst])
             }
+            Instruction::TableFromList { src_dst, columns } => {
+                let mut inputs = Vec::with_capacity(columns.len() + 1);
+                inputs.push(*src_dst);
+                inputs.extend(columns.iter().copied());
+                allocate(&inputs, &[*src_dst])
+            }
             Instruction::RecordInsert { src_dst, key, val } => {
                 allocate(&[*src_dst, *key, *val], &[*src_dst])
             }

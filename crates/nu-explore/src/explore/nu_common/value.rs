@@ -9,6 +9,11 @@ pub fn collect_pipeline(input: PipelineData) -> Result<(Vec<String>, Vec<Vec<Val
         PipelineData::Empty => Ok((vec![], vec![])),
         PipelineData::Value(value, ..) => collect_input(value),
         PipelineData::ListStream(stream, ..) => Ok(collect_list_stream(stream)),
+        PipelineData::TableStream(stream, ..) => {
+            let columns = stream.columns().to_vec();
+            let rows = convert_records_to_dataset(&columns, stream.into_iter().collect());
+            Ok((columns, rows))
+        }
         PipelineData::ByteStream(stream, metadata) => Ok(collect_byte_stream(stream, metadata)),
     }
 }

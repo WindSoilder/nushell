@@ -16,6 +16,20 @@ fn sets_the_column() -> Result {
 }
 
 #[test]
+fn upsert_adds_column_to_empty_table_stream_schema() -> Result {
+    test()
+        .run(r#""a,b\n" | from csv | upsert c 1 | columns | to nuon"#)
+        .expect_value_eq("[a, b, c]")
+}
+
+#[test]
+fn upsert_adds_column_to_nonempty_table_stream_schema() -> Result {
+    test()
+        .run(r#""a\n1\n" | from csv | upsert b 2 | columns | to nuon"#)
+        .expect_value_eq("[a, b]")
+}
+
+#[test]
 fn doesnt_convert_record_to_table() -> Result {
     test()
         .run("{a:1} | upsert a 2 | to nuon")

@@ -17,10 +17,13 @@ impl Command for Uniq {
 
     fn signature(&self) -> Signature {
         Signature::build("uniq")
-            .input_output_types(vec![(
-                Type::List(Box::new(Type::Any)),
-                Type::List(Box::new(Type::Any)),
-            )])
+            .input_output_types(vec![
+                (Type::table(), Type::table()),
+                (
+                    Type::List(Box::new(Type::Any)),
+                    Type::List(Box::new(Type::Any)),
+                ),
+            ])
             .switch(
                 "count",
                 "Return a table containing the distinct input values together with their counts.",
@@ -88,6 +91,11 @@ impl Command for Uniq {
             },
         );
 
+        let table_columns = match &input {
+            PipelineData::Value(Value::Table { val, .. }, _) => Some(val.columns().to_vec()),
+            PipelineData::TableStream(stream, _) => Some(stream.columns().to_vec()),
+            _ => None,
+        };
         let metadata = input.take_metadata();
         uniq(
             engine_state,
@@ -96,6 +104,7 @@ impl Command for Uniq {
             input.into_iter().collect(),
             mapper,
             metadata,
+            table_columns,
         )
     }
 
@@ -205,6 +214,12 @@ fn clone_to_folded_case(value: &Value) -> Value {
         Value::List { vals: vec, .. } => {
             Value::list(vec.iter().map(clone_to_folded_case).collect(), span)
         }
+        Value::Table { val, .. } => Value::table_with_columns(
+            val.columns().to_vec(),
+            val.rows().iter().map(clone_to_folded_case).collect(),
+            span,
+        )
+        .unwrap_or_else(|err| Value::error(err, span)),
         Value::Record { val: record, .. } => Value::record(
             record
                 .iter()
@@ -238,6 +253,7 @@ pub fn uniq(
     input: Vec<Value>,
     item_mapper: Box<dyn Fn(ItemMapperState) -> Result<ValueCounter, ShellError>>,
     metadata: Option<PipelineMetadata>,
+    table_columns: Option<Vec<String>>,
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
     let flag_show_count = call.has_flag(engine_state, stack, "count")?;
@@ -300,7 +316,13 @@ pub fn uniq(
         uniq_values.into_iter().map(|v| v.val).collect()
     };
 
-    Ok(Value::list(result, head).into_pipeline_data_with_metadata(metadata))
+    let value = match table_columns {
+        Some(columns) if !flag_show_count => Value::table_with_columns(columns, result, head)?,
+        Some(_) => Value::table_with_columns(vec!["value".into(), "count".into()], result, head)?,
+        None => Value::list(result, head),
+    };
+
+    Ok(value.into_pipeline_data_with_metadata(metadata))
 }
 
 fn sort(iter: IntoIter<String, ValueCounter>) -> Vec<ValueCounter> {

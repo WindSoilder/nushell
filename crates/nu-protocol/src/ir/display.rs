@@ -199,6 +199,9 @@ impl fmt::Display for FmtInstruction<'_> {
             Instruction::ListSpread { src_dst, items } => {
                 write!(f, "{:WIDTH$} {src_dst}, {items}", "list-spread")
             }
+            Instruction::TableFromList { src_dst, columns } => {
+                write!(f, "{:WIDTH$} {src_dst}, {columns:?}", "table-from-list")
+            }
             Instruction::RecordInsert { src_dst, key, val } => {
                 write!(f, "{:WIDTH$} {src_dst}, {key}, {val}", "record-insert")
             }

@@ -263,6 +263,11 @@ fn operate(
                 }
             })
             .into()),
+        PipelineData::TableStream(stream, ..) => Err(ShellError::PipelineMismatch {
+            exp_input_type: "string".into(),
+            dst_span: head,
+            src_span: stream.span(),
+        }),
         PipelineData::ByteStream(stream, ..) => {
             let val = stream.into_string()?;
 

@@ -65,6 +65,11 @@ fn get_string(input: PipelineData, call_span: Span) -> Result<(String, Span), Sh
             dst_span: call_span,
             src_span: list.span(),
         }),
+        PipelineData::TableStream(table, ..) => Err(ShellError::PipelineMismatch {
+            exp_input_type: "binary or string".to_owned(),
+            dst_span: call_span,
+            src_span: table.span(),
+        }),
         PipelineData::ByteStream(stream, ..) => {
             let span = stream.span();
             Ok((stream.into_string()?, span))
@@ -93,6 +98,11 @@ fn get_binary(input: PipelineData, call_span: Span) -> Result<(Vec<u8>, Span), S
             exp_input_type: "binary or string".to_owned(),
             dst_span: call_span,
             src_span: list.span(),
+        }),
+        PipelineData::TableStream(table, ..) => Err(ShellError::PipelineMismatch {
+            exp_input_type: "binary or string".to_owned(),
+            dst_span: call_span,
+            src_span: table.span(),
         }),
         PipelineData::ByteStream(stream, ..) => {
             let span = stream.span();

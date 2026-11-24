@@ -5,6 +5,7 @@ mod from_value;
 mod glob;
 mod into_value;
 mod range;
+mod table;
 #[cfg(test)]
 mod test_derive;
 mod type_mismatch;
@@ -22,10 +23,12 @@ pub use into_value::{IntoValue, TryIntoValue};
 pub use nu_utils::MultiLife;
 pub use range::{FloatRange, IntRange, ParseRangeError, Range};
 pub use record::Record;
+pub use table::Table;
 
 use crate::{
     BlockId, CompareTypes, Config, ShellError, Signals, Span, Type, TypeRelation,
     ast::{Bits, Boolean, CellPath, Comparison, Math, Operator, PathMember},
+    casing::Casing,
     did_you_mean,
     engine::{Closure, EngineState},
 };
@@ -174,6 +177,14 @@ pub enum Value {
         internal_span: Span,
     },
     #[non_exhaustive]
+    Table {
+        val: SharedCow<Table>,
+        /// note: spans are being refactored out of Value
+        /// please use .span() instead of matching this span value
+        #[serde(rename = "span")]
+        internal_span: Span,
+    },
+    #[non_exhaustive]
     Closure {
         val: Box<Closure>,
         /// note: spans are being refactored out of Value
@@ -308,6 +319,11 @@ impl Debug for Value {
                     .field("signals", signals)
                     .field("internal_span", internal_span)
                     .finish(),
+                Self::Table { val, internal_span } => f
+                    .debug_struct("Table")
+                    .field("val", val)
+                    .field("internal_span", internal_span)
+                    .finish(),
                 Self::Closure { val, internal_span } => f
                     .debug_struct("Closure")
                     .field("val", val)
@@ -371,6 +387,7 @@ impl Debug for Value {
             Value::Range { val, .. } => wrap_tuple("Range", display_as_debug(val)).fmt(f),
             Value::Record { val, .. } => wrap_tuple("Record", val).fmt(f),
             Value::List { vals, .. } => wrap_tuple("List", vals).fmt(f),
+            Value::Table { val, .. } => wrap_tuple("Table", val).fmt(f),
             Value::Closure { val, .. } => wrap_tuple("Closure", val.compact_debug()).fmt(f),
             Value::Error { error, .. } => wrap_tuple("Error", error).fmt(f),
             Value::Binary { val, .. } => wrap_tuple("Binary", BStr::new(val.as_slice())).fmt(f),
@@ -437,6 +454,10 @@ impl Clone for Value {
             } => Value::List {
                 vals: vals.clone(),
                 signals: signals.clone(),
+                internal_span: *internal_span,
+            },
+            Value::Table { val, internal_span } => Value::Table {
+                val: val.clone(),
                 internal_span: *internal_span,
             },
             Value::Closure { val, internal_span } => Value::Closure {
@@ -794,6 +815,24 @@ impl Value {
         }
     }
 
+    /// Returns a reference to the inner [`Table`] or an error if this value is not a table.
+    pub fn as_table(&self) -> Result<&Table, ShellError> {
+        if let Value::Table { val, .. } = self {
+            Ok(val)
+        } else {
+            self.cant_convert_to("table")
+        }
+    }
+
+    /// Unwraps the inner [`Table`] or returns an error if this value is not a table.
+    pub fn into_table(self) -> Result<Table, ShellError> {
+        if let Value::Table { val, .. } = self {
+            Ok(val.into_owned())
+        } else {
+            self.cant_convert_to("table")
+        }
+    }
+
     /// Returns a reference to the inner [`Closure`] value or an error if this `Value` is not a closure
     pub fn as_closure(&self) -> Result<&Closure, ShellError> {
         if let Value::Closure { val, .. } = self {
@@ -959,6 +998,7 @@ impl Value {
             | Value::Glob { internal_span, .. }
             | Value::Record { internal_span, .. }
             | Value::List { internal_span, .. }
+            | Value::Table { internal_span, .. }
             | Value::Closure { internal_span, .. }
             | Value::Nothing { internal_span, .. }
             | Value::Binary { internal_span, .. }
@@ -982,6 +1022,7 @@ impl Value {
             | Value::Glob { internal_span, .. }
             | Value::Record { internal_span, .. }
             | Value::List { internal_span, .. }
+            | Value::Table { internal_span, .. }
             | Value::Closure { internal_span, .. }
             | Value::Nothing { internal_span, .. }
             | Value::Binary { internal_span, .. }
@@ -1020,6 +1061,7 @@ impl Value {
                     ty => Type::list(ty),
                 }
             }
+            Value::Table { val, .. } => val.get_type(),
             Value::Nothing { .. } => Type::Nothing,
             Value::Closure { .. } => Type::Closure,
             Value::Error { .. } => Type::Error,
@@ -1044,6 +1086,7 @@ impl Value {
             Value::Glob { .. } => Type::Glob,
             Value::Record { .. } => Type::record(),
             Value::List { .. } => Type::list(Type::Any),
+            Value::Table { .. } => Type::table(),
             Value::Nothing { .. } => Type::Nothing,
             Value::Closure { .. } => Type::Closure,
             Value::Error { .. } => Type::Error,
@@ -1073,6 +1116,19 @@ impl Value {
                 } else {
                     None
                 }
+            }
+            Value::Table { val, .. } => {
+                let out = val
+                    .rows()
+                    .iter()
+                    .map(|item| {
+                        item.as_record()
+                            .ok()
+                            .and_then(|record| record.get(name).cloned())
+                            .unwrap_or(Value::nothing(span))
+                    })
+                    .collect::<Vec<_>>();
+                (!out.is_empty()).then(|| Value::list(out, span))
             }
             _ => None,
         }
@@ -1131,6 +1187,14 @@ impl Value {
                     .collect::<Vec<_>>()
                     .join(separator)
             ),
+            Value::Table { val, .. } => format!(
+                "[{}]",
+                val.rows()
+                    .iter()
+                    .map(|x| x.to_expanded_string(", ", config))
+                    .collect::<Vec<_>>()
+                    .join(separator)
+            ),
             Value::Record { val, .. } => format!(
                 "{{{}}}",
                 val.iter()
@@ -1180,6 +1244,11 @@ impl Value {
                     )
                 }
             }
+            Value::Table { val, .. } => format!(
+                "[table {} row{}]",
+                val.len(),
+                if val.len() == 1 { "" } else { "s" }
+            ),
             Value::Record { val, .. } => format!(
                 "{{record {} field{}}}",
                 val.len(),
@@ -1206,6 +1275,14 @@ impl Value {
             Value::List { vals: val, .. } => format!(
                 "[{}]",
                 val.iter()
+                    .map(|x| x.to_parsable_string(", ", config))
+                    .collect::<Vec<_>>()
+                    .join(separator)
+            ),
+            Value::Table { val, .. } => format!(
+                "[{}]",
+                val.rows()
+                    .iter()
                     .map(|x| x.to_parsable_string(", ", config))
                     .collect::<Vec<_>>()
                     .join(separator)
@@ -1637,6 +1714,44 @@ impl Value {
                         }
                     }
                 }
+                Value::Table { val, .. } => {
+                    if !matches!(action, CellPathMutation::Remove { .. })
+                        && let Some(new_cell_path) = Self::try_put_int_path_member_on_top(cell_path)
+                    {
+                        self.mutate_data_at_cell_path(&new_cell_path, new_val.clone(), action)?;
+                    } else {
+                        let table = val.to_mut();
+                        for row in table.rows_mut() {
+                            let row_span = row.span();
+                            match row {
+                                Value::Record { val: record, .. } => {
+                                    Self::mutate_record_at_string_member(
+                                        record.to_mut(),
+                                        member,
+                                        row_span,
+                                        path,
+                                        new_val.clone(),
+                                        action,
+                                    )?;
+                                }
+                                Value::Error { error, .. } => return Err(*error.clone()),
+                                _ => {
+                                    return Err(ShellError::NushellFailed {
+                                        msg: "table invariant violated: non-record row".into(),
+                                    });
+                                }
+                            }
+                        }
+
+                        if matches!(
+                            action,
+                            CellPathMutation::Insert { .. } | CellPathMutation::Upsert
+                        ) && !table.columns().contains(col_name)
+                        {
+                            table.push_column(col_name.clone());
+                        }
+                    }
+                }
                 Value::Record { val: record, .. } => {
                     Self::mutate_record_at_string_member(
                         record.to_mut(),
@@ -1724,6 +1839,20 @@ impl Value {
                         }
                     }
                 }
+                Value::Table { val, .. } => {
+                    let rows = val.to_mut().rows_mut();
+                    if *row_num < rows.len() {
+                        rows[*row_num].mutate_data_at_cell_path(path, new_val, action)?;
+                    } else if !*optional {
+                        if rows.is_empty() {
+                            return Err(ShellError::AccessEmptyContent { span: *span });
+                        }
+                        return Err(ShellError::AccessBeyondEnd {
+                            max_idx: rows.len() - 1,
+                            span: *span,
+                        });
+                    }
+                }
                 Value::Error { error, .. } => return Err(*error.clone()),
                 Value::Custom { val, .. } => {
                     let mut full_path = vec![member.clone()];
@@ -1796,6 +1925,10 @@ impl Value {
                 .to_mut()
                 .iter_mut()
                 .try_for_each(|list_value| list_value.recurse_mut(f)),
+            // Do not pass the row wrapper to `f`: replacing a record row with an arbitrary value
+            // would violate `Table`'s fixed-schema invariant. The table constructor guarantees
+            // these are records, so visit their cell values directly instead.
+            Value::Table { val, .. } => val.to_mut().recurse_mut(f),
             // Closure captures are visited. Maybe these don't have to be if they are changed to
             // more opaque references.
             Value::Closure { val, .. } => val
@@ -1827,6 +1960,7 @@ impl Value {
         match self {
             Value::String { val, .. } => val.is_empty(),
             Value::List { vals, .. } => vals.is_empty(),
+            Value::Table { val, .. } => val.is_empty(),
             Value::Record { val, .. } => val.is_empty(),
             Value::Binary { val, .. } => val.is_empty(),
             Value::Nothing { .. } => true,
@@ -1882,6 +2016,11 @@ impl Value {
             Value::Record { val, .. } => std::mem::size_of::<Self>() + val.memory_size(),
             Value::List { vals, .. } => {
                 std::mem::size_of::<Self>() + vals.iter().map(|v| v.memory_size()).sum::<usize>()
+            }
+            Value::Table { val, .. } => {
+                std::mem::size_of::<Self>()
+                    + val.columns().iter().map(String::capacity).sum::<usize>()
+                    + val.rows().iter().map(Value::memory_size).sum::<usize>()
             }
             Value::Closure { val, .. } => std::mem::size_of::<Self>() + val.memory_size(),
             Value::Nothing { .. } => std::mem::size_of::<Self>(),
@@ -1977,6 +2116,26 @@ impl Value {
             signals: None,
             internal_span: span,
         }
+    }
+
+    /// Create a materialized table, inferring its ordered schema from record rows.
+    pub fn table(rows: Vec<Value>, span: Span) -> Result<Value, ShellError> {
+        Ok(Value::Table {
+            val: SharedCow::new(Table::from_rows(rows, span)?),
+            internal_span: span,
+        })
+    }
+
+    /// Create a materialized table with an explicit ordered schema.
+    pub fn table_with_columns(
+        columns: Vec<String>,
+        rows: Vec<Value>,
+        span: Span,
+    ) -> Result<Value, ShellError> {
+        Ok(Value::Table {
+            val: SharedCow::new(Table::new(columns, rows, span)?),
+            internal_span: span,
+        })
     }
 
     pub fn closure(val: Closure, span: Span) -> Value {
@@ -2206,6 +2365,7 @@ impl CompareTypes<Type> for Value {
                     .try_fold(TypeRelation::Equal, |acc, e| acc.combine(e?)),
                 _ => None,
             },
+            Value::Table { val, .. } => val.get_type().compare_types(other),
             Value::Record { val, .. } => match other {
                 Type::Record(cols) => val.compare_types(cols),
                 _ => None,
@@ -2259,6 +2419,20 @@ fn get_value_member<'a>(
                     } else {
                         Err(ShellError::AccessBeyondEnd {
                             max_idx: vals.len() - 1,
+                            span: *origin_span,
+                        })
+                    }
+                }
+                Value::Table { val, .. } => {
+                    if let Some(row) = val.get(*count) {
+                        Ok(ControlFlow::Continue(Cow::Borrowed(row)))
+                    } else if *optional {
+                        Ok(ControlFlow::Break(*origin_span))
+                    } else if val.is_empty() {
+                        Err(ShellError::AccessEmptyContent { span: *origin_span })
+                    } else {
+                        Err(ShellError::AccessBeyondEnd {
+                            max_idx: val.len() - 1,
                             span: *origin_span,
                         })
                     }
@@ -2393,6 +2567,53 @@ fn get_value_member<'a>(
 
                     Ok(ControlFlow::Continue(Cow::Owned(Value::list(list, span))))
                 }
+                Value::Table { val, .. } => {
+                    let schema_column = val.columns().iter().rfind(|column| match casing {
+                        Casing::Sensitive => *column == column_name,
+                        Casing::Insensitive => column.eq_ignore_ascii_case(column_name),
+                    });
+                    if schema_column.is_none() {
+                        if *optional {
+                            return Ok(ControlFlow::Continue(Cow::Owned(Value::list(
+                                std::iter::repeat_with(|| Value::nothing(*origin_span))
+                                    .take(val.len())
+                                    .collect(),
+                                span,
+                            ))));
+                        }
+                        if let Some(suggestion) = did_you_mean(val.columns(), column_name) {
+                            return Err(ShellError::DidYouMean {
+                                suggestion,
+                                span: *origin_span,
+                            });
+                        }
+                        return Err(ShellError::CantFindColumn {
+                            col_name: column_name.clone(),
+                            span: Some(*origin_span),
+                            src_span: span,
+                        });
+                    }
+                    let list = val
+                        .rows()
+                        .iter()
+                        .map(|row| {
+                            let row_span = row.span();
+                            let record = row.as_record()?;
+                            if let Some(found) = record.cased(*casing).get(column_name) {
+                                Ok(found.clone())
+                            } else if *optional {
+                                Ok(Value::nothing(*origin_span))
+                            } else {
+                                Err(ShellError::CantFindColumn {
+                                    col_name: column_name.clone(),
+                                    span: Some(*origin_span),
+                                    src_span: row_span,
+                                })
+                            }
+                        })
+                        .collect::<Result<_, ShellError>>()?;
+                    Ok(ControlFlow::Continue(Cow::Owned(Value::list(list, span))))
+                }
                 Value::Custom { val, .. } => {
                     match val.follow_path_string(
                         current.span(),
@@ -2461,7 +2682,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Less),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2480,7 +2701,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Less),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2499,7 +2720,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Less),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2518,7 +2739,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Less),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2537,7 +2758,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Less),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2556,7 +2777,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Less),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2575,7 +2796,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Less),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2594,7 +2815,7 @@ impl PartialOrd for Value {
                 Value::Date { val: rhs, .. } => lhs.partial_cmp(rhs),
                 Value::Range { .. } => Some(Ordering::Less),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2613,7 +2834,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Greater),
                 Value::Range { val: rhs, .. } => lhs.partial_cmp(rhs),
                 Value::Record { .. } => Some(Ordering::Less),
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2658,7 +2879,7 @@ impl PartialOrd for Value {
                     // that the shorter sequence is less than the longer one
                     lhs.len().partial_cmp(&rhs.len())
                 }
-                Value::List { .. } => Some(Ordering::Less),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2678,12 +2899,43 @@ impl PartialOrd for Value {
                 Value::Range { .. } => Some(Ordering::Greater),
                 Value::Record { .. } => Some(Ordering::Greater),
                 Value::List { vals: rhs, .. } => lhs.partial_cmp(rhs),
+                Value::Table { .. } => Some(Ordering::Less),
                 Value::Closure { .. } => Some(Ordering::Less),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
                 Value::CellPath { .. } => Some(Ordering::Less),
                 Value::Custom { .. } => Some(Ordering::Less),
                 Value::Nothing { .. } => Some(Ordering::Less),
+            },
+            (Value::Table { val: lhs, .. }, rhs) => match rhs {
+                Value::Bool { .. }
+                | Value::Int { .. }
+                | Value::Float { .. }
+                | Value::String { .. }
+                | Value::Glob { .. }
+                | Value::Filesize { .. }
+                | Value::Duration { .. }
+                | Value::Date { .. }
+                | Value::Range { .. }
+                | Value::Record { .. }
+                | Value::List { .. } => Some(Ordering::Greater),
+                Value::Table { val: rhs, .. } => {
+                    lhs.columns()
+                        .partial_cmp(rhs.columns())
+                        .and_then(|ordering| {
+                            if ordering == Ordering::Equal {
+                                lhs.rows().partial_cmp(rhs.rows())
+                            } else {
+                                Some(ordering)
+                            }
+                        })
+                }
+                Value::Closure { .. }
+                | Value::Error { .. }
+                | Value::Binary { .. }
+                | Value::CellPath { .. }
+                | Value::Custom { .. }
+                | Value::Nothing { .. } => Some(Ordering::Less),
             },
             (Value::Closure { val: lhs, .. }, rhs) => match rhs {
                 Value::Bool { .. } => Some(Ordering::Greater),
@@ -2696,7 +2948,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Greater),
                 Value::Range { .. } => Some(Ordering::Greater),
                 Value::Record { .. } => Some(Ordering::Greater),
-                Value::List { .. } => Some(Ordering::Greater),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Greater),
                 Value::Closure { val: rhs, .. } => lhs.block_id.partial_cmp(&rhs.block_id),
                 Value::Error { .. } => Some(Ordering::Less),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2715,7 +2967,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Greater),
                 Value::Range { .. } => Some(Ordering::Greater),
                 Value::Record { .. } => Some(Ordering::Greater),
-                Value::List { .. } => Some(Ordering::Greater),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Greater),
                 Value::Closure { .. } => Some(Ordering::Greater),
                 Value::Error { .. } => Some(Ordering::Equal),
                 Value::Binary { .. } => Some(Ordering::Less),
@@ -2734,7 +2986,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Greater),
                 Value::Range { .. } => Some(Ordering::Greater),
                 Value::Record { .. } => Some(Ordering::Greater),
-                Value::List { .. } => Some(Ordering::Greater),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Greater),
                 Value::Closure { .. } => Some(Ordering::Greater),
                 Value::Error { .. } => Some(Ordering::Greater),
                 Value::Binary { val: rhs, .. } => lhs.partial_cmp(rhs),
@@ -2753,7 +3005,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Greater),
                 Value::Range { .. } => Some(Ordering::Greater),
                 Value::Record { .. } => Some(Ordering::Greater),
-                Value::List { .. } => Some(Ordering::Greater),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Greater),
                 Value::Closure { .. } => Some(Ordering::Greater),
                 Value::Error { .. } => Some(Ordering::Greater),
                 Value::Binary { .. } => Some(Ordering::Greater),
@@ -2773,7 +3025,7 @@ impl PartialOrd for Value {
                 Value::Date { .. } => Some(Ordering::Greater),
                 Value::Range { .. } => Some(Ordering::Greater),
                 Value::Record { .. } => Some(Ordering::Greater),
-                Value::List { .. } => Some(Ordering::Greater),
+                Value::List { .. } | Value::Table { .. } => Some(Ordering::Greater),
                 Value::Closure { .. } => Some(Ordering::Greater),
                 Value::Error { .. } => Some(Ordering::Greater),
                 Value::Binary { .. } => Some(Ordering::Greater),
@@ -2864,6 +3116,7 @@ impl Hash for Value {
                     val.hash(state);
                 }
             }
+            Value::Table { val, .. } => val.hash(state),
             Value::Closure { val, .. } => val.hash(state),
             // `ShellError` has no `Hash`; all errors share one bucket.
             Value::Error { .. } => {}
@@ -2954,6 +3207,15 @@ impl Value {
             (Value::List { vals: lhs, .. }, Value::List { vals: rhs, .. }) => {
                 lhs.len() == rhs.len() && lhs.iter().zip(rhs).all(|(lhs, rhs)| lhs.strict_eq(rhs))
             }
+            (Value::Table { val: lhs, .. }, Value::Table { val: rhs, .. }) => {
+                lhs.columns() == rhs.columns()
+                    && lhs.rows().len() == rhs.rows().len()
+                    && lhs
+                        .rows()
+                        .iter()
+                        .zip(rhs.rows())
+                        .all(|(lhs, rhs)| lhs.strict_eq(rhs))
+            }
             (Value::Closure { val: lhs, .. }, Value::Closure { val: rhs, .. }) => {
                 lhs.block_id == rhs.block_id
                     && lhs.captures.len() == rhs.captures.len()
@@ -2983,6 +3245,7 @@ impl Value {
                 | Value::Range { .. }
                 | Value::Record { .. }
                 | Value::List { .. }
+                | Value::Table { .. }
                 | Value::Closure { .. }
                 | Value::Error { .. }
                 | Value::Binary { .. }

@@ -1,4 +1,5 @@
 use nu_engine::command_prelude::*;
+use nu_protocol::TableStream;
 
 #[derive(Clone)]
 pub struct Wrap;
@@ -37,6 +38,32 @@ impl Command for Wrap {
 
         match input {
             PipelineData::Empty => Ok(PipelineData::empty()),
+            PipelineData::Value(Value::Table { val, .. }, ..) => {
+                let stream =
+                    TableStream::from_table(val.into_owned(), span, engine_state.signals().clone())
+                        .modify_with_columns(vec![name.clone()], move |rows| {
+                            rows.map(move |x| {
+                                if x.is_error() {
+                                    x
+                                } else {
+                                    Value::record(record! { name.clone() => x }, span)
+                                }
+                            })
+                        })?;
+                Ok(PipelineData::table_stream(stream, metadata))
+            }
+            PipelineData::TableStream(stream, ..) => {
+                let stream = stream.modify_with_columns(vec![name.clone()], move |rows| {
+                    rows.map(move |x| {
+                        if x.is_error() {
+                            x
+                        } else {
+                            Value::record(record! { name.clone() => x }, span)
+                        }
+                    })
+                })?;
+                Ok(PipelineData::table_stream(stream, metadata))
+            }
             PipelineData::Value(Value::Range { .. }, ..)
             | PipelineData::Value(Value::List { .. }, ..)
             | PipelineData::ListStream { .. } => Ok(input

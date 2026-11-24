@@ -312,6 +312,25 @@ impl Command for ParEach {
                     ))
                 }
             }
+            PipelineData::TableStream(stream, ..) => {
+                let pool = create_pool(max_threads, head)?;
+                if keep_order {
+                    Ok(pool.install(|| {
+                        let par_iter = stream.into_iter().enumerate().par_bridge();
+                        let mapped = parallel_closure_map(closure_eval, par_iter);
+                        apply_order(mapped.collect()).into_pipeline_data(head, signals.clone())
+                    }))
+                } else {
+                    let par_iter = stream.into_iter().par_bridge();
+                    Ok(stream_parallel_values(
+                        closure_eval,
+                        pool,
+                        head,
+                        signals.clone(),
+                        par_iter,
+                    ))
+                }
+            }
             PipelineData::ByteStream(stream, ..) => {
                 if let Some(chunks) = stream.chunks() {
                     let pool = create_pool(max_threads, head)?;

@@ -286,6 +286,32 @@ fn run(
                 Value::string(format!("{base_description} (stream)"), head)
             }
         }
+        PipelineData::TableStream(stream, ..) => {
+            let type_ = type_of(&stream);
+            if options.detailed {
+                let subtype = if options.no_collect {
+                    Value::string(stream.get_type().to_string(), head)
+                } else {
+                    describe_value(stream.into_value()?, head, engine_state)
+                };
+                Value::record(
+                    record! {
+                        "type" => Value::string("stream", head),
+                        "detailed_type" => Value::string("table stream", head),
+                        "rust_type" => Value::string(type_, head),
+                        "origin" => Value::string("nushell", head),
+                        "subtype" => subtype,
+                        "metadata" => metadata_to_value(metadata, head),
+                    },
+                    head,
+                )
+            } else if options.no_collect {
+                Value::string("table stream", head)
+            } else {
+                let value = stream.into_value()?;
+                Value::string(format!("{} (stream)", value.get_type()), head)
+            }
+        }
         PipelineData::Value(value, ..) => {
             if !options.detailed {
                 Value::string(value.get_type().to_string(), head)
@@ -416,6 +442,13 @@ fn describe_value_inner(
                 "value" => value,
             })
         }
+        Value::Table { ref val, .. } => Description::Record(record! {
+            "type" => Value::string("table", head),
+            "detailed_type" => Value::string(value_type, head),
+            "length" => Value::int(val.len() as i64, head),
+            "rust_type" => Value::string(type_of(&val), head),
+            "value" => value,
+        }),
         Value::Closure { ref val, .. } => {
             let block =
                 engine_state.and_then(|engine_state| engine_state.try_get_block(val.block_id));

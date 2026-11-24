@@ -437,6 +437,14 @@ fn value_to_string(
                 ))
             }
         }
+        Value::Table { val, .. } => value_to_string(
+            engine_state,
+            &Value::list(val.rows().to_vec(), v.span()),
+            span,
+            depth,
+            indent,
+            options,
+        ),
         Value::Nothing { .. } => Ok("null".to_string()),
         Value::Range { val, .. } => match **val {
             Range::IntRange(range) => Ok(range.to_string()),

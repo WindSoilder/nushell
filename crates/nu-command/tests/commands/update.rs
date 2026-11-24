@@ -17,6 +17,20 @@ fn sets_the_column() -> Result {
 }
 
 #[test]
+fn update_preserves_empty_table_stream_schema() -> Result {
+    test()
+        .run(r#""a,b\n" | from csv | update a 1 | columns | to nuon"#)
+        .expect_value_eq("[a, b]")
+}
+
+#[test]
+fn update_preserves_nonempty_table_stream_schema() -> Result {
+    test()
+        .run(r#""a,b\n1,2\n" | from csv | update a 3 | columns | to nuon"#)
+        .expect_value_eq("[a, b]")
+}
+
+#[test]
 fn doesnt_convert_record_to_table() -> Result {
     test()
         .run("{a:1} | update a 2 | to nuon")

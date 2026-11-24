@@ -138,6 +138,10 @@ pub enum PipelineDataHeader {
     ///
     /// Items are sent via [`StreamData`]
     ListStream(ListStreamInfo),
+    /// Initiate [`nu_protocol::PipelineData::TableStream`].
+    ///
+    /// Rows are sent as values via [`StreamData`].
+    TableStream(TableStreamInfo),
     /// Initiate [`nu_protocol::PipelineData::byte_stream`].
     ///
     /// Items are sent via [`StreamData`]
@@ -151,6 +155,7 @@ impl PipelineDataHeader {
             PipelineDataHeader::Empty => None,
             PipelineDataHeader::Value(_, _) => None,
             PipelineDataHeader::ListStream(info) => Some(info.id),
+            PipelineDataHeader::TableStream(info) => Some(info.id),
             PipelineDataHeader::ByteStream(info) => Some(info.id),
         }
     }
@@ -163,8 +168,33 @@ impl PipelineDataHeader {
         PipelineDataHeader::ListStream(info)
     }
 
+    pub fn table_stream(info: TableStreamInfo) -> Self {
+        PipelineDataHeader::TableStream(info)
+    }
+
     pub fn byte_stream(info: ByteStreamInfo) -> Self {
         PipelineDataHeader::ByteStream(info)
+    }
+}
+
+/// Additional information about table streams.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct TableStreamInfo {
+    pub id: StreamId,
+    pub columns: Vec<String>,
+    pub span: Span,
+    pub metadata: Option<PipelineMetadata>,
+}
+
+impl TableStreamInfo {
+    /// Create a new `TableStreamInfo` with a unique ID and an ordered schema.
+    pub fn new(id: StreamId, columns: Vec<String>, span: Span) -> Self {
+        Self {
+            id,
+            columns,
+            span,
+            metadata: None,
+        }
     }
 }
 
@@ -471,6 +501,7 @@ impl PluginCallResponse<PipelineData> {
                 PipelineData::Empty => false,
                 PipelineData::Value(..) => false,
                 PipelineData::ListStream(..) => true,
+                PipelineData::TableStream(..) => true,
                 PipelineData::ByteStream(..) => true,
             },
             _ => false,

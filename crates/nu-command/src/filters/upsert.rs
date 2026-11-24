@@ -295,6 +295,56 @@ fn upsert_recursive(
                 Ok(PipelineData::list_stream(stream, metadata))
             }
         }
+        PipelineData::TableStream(stream, metadata) => {
+            if let Some(PathMember::String { val, .. }) = cell_paths.first()
+                && cell_paths.len() == 1
+            {
+                let mut columns = stream.columns().to_vec();
+                if !columns.contains(val) {
+                    columns.push(val.clone());
+                }
+                let cell_paths = cell_paths.to_vec();
+                let stream = if let Value::Closure { val, .. } = replacement {
+                    let mut closure = ClosureEval::try_new(engine_state, stack, *val, head_span)?;
+                    stream.modify_with_columns(columns, move |rows| {
+                        rows.map(move |mut value| {
+                            match upsert_value_by_closure(
+                                &mut value,
+                                &mut closure,
+                                head_span,
+                                &cell_paths,
+                            ) {
+                                Ok(()) => value,
+                                Err(err) => Value::error(err, head_span),
+                            }
+                        })
+                    })?
+                } else {
+                    stream.modify_with_columns(columns, move |rows| {
+                        rows.map(move |mut value| {
+                            match value.upsert_data_at_cell_path(&cell_paths, replacement.clone()) {
+                                Ok(()) => value,
+                                Err(err) => Value::error(err, head_span),
+                            }
+                        })
+                    })?
+                };
+                Ok(PipelineData::table_stream(stream, metadata))
+            } else {
+                upsert_recursive(
+                    engine_state,
+                    stack,
+                    head_span,
+                    replacement,
+                    stream.into_iter().into_pipeline_data_with_metadata(
+                        head_span,
+                        engine_state.signals().clone(),
+                        metadata,
+                    ),
+                    cell_paths,
+                )
+            }
+        }
         PipelineData::Empty => Err(ShellError::IncompatiblePathAccess {
             type_name: "empty pipeline".to_string(),
             span: head_span,

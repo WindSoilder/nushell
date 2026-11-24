@@ -171,7 +171,8 @@ they represent."#
             }
             PipelineData::Value(Value::Range { .. }, ..)
             | PipelineData::Value(Value::List { .. }, ..)
-            | PipelineData::ListStream(..) => {
+            | PipelineData::ListStream(..)
+            | PipelineData::TableStream(..) => {
                 let metadata = input.take_metadata();
                 let mut closure = ClosureEval::try_new(engine_state, stack, closure, head)?;
 

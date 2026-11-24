@@ -2,7 +2,8 @@
 use crate::database::QueryPlan;
 use nu_engine::command_prelude::*;
 use nu_protocol::{
-    PipelineIterator, ast::PathMember, casing::Casing, shell_error::generic::GenericError,
+    PipelineIterator, TableStream, ast::PathMember, casing::Casing,
+    shell_error::generic::GenericError,
 };
 use std::collections::BTreeSet;
 
@@ -340,6 +341,31 @@ fn select(
                 }
             })
             .into_pipeline_data_with_metadata(call_span, engine_state.signals().clone(), metadata)),
+        PipelineData::TableStream(stream, metadata) => {
+            if columns.is_empty() {
+                return Ok(PipelineData::table_stream(stream, metadata));
+            }
+
+            let selected_columns = columns.iter().map(CellPath::to_column_name).collect();
+            let rows = stream.into_iter().map(move |value| {
+                let mut record = Record::new();
+                for path in &columns {
+                    match value.follow_cell_path(&path.members) {
+                        Ok(value) => record.push(path.to_column_name(), value.into_owned()),
+                        Err(error) => return Value::error(error, call_span),
+                    }
+                }
+                Value::record(record, call_span)
+            });
+            let stream = TableStream::new(
+                selected_columns,
+                rows,
+                call_span,
+                engine_state.signals().clone(),
+            )?;
+
+            Ok(PipelineData::table_stream(stream, metadata))
+        }
         _ => Ok(PipelineData::empty()),
     }
 }

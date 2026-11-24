@@ -47,3 +47,10 @@ fn length_propagates_explicit_closures_errors_in_stream() -> Result {
     assert_eq!(err.into_inner()?.into_labeled()?.msg, "boom");
     Ok(())
 }
+
+#[test]
+fn length_counts_table_stream_rows() -> Result {
+    test()
+        .run(r#""a,b\n1,2\n3,4\n" | from csv | length"#)
+        .expect_value_eq(2)
+}

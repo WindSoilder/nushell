@@ -500,6 +500,13 @@ impl<'v> YamlValue<'v> {
                 }
                 YamlValue::Seq(YamlSeq(values))
             }
+            Value::Table { val, .. } => {
+                let mut values = Vec::with_capacity(val.len());
+                for row in val.rows() {
+                    values.push(YamlValue::try_from_value(row, span)?);
+                }
+                YamlValue::Seq(YamlSeq(values))
+            }
             Value::Closure { val, .. } => YamlValue::Closure(val),
             Value::Error { error, .. } => YamlValue::Error(error),
             Value::Binary { val, .. } => YamlValue::Binary(val.as_slice()),

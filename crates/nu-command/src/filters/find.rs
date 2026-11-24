@@ -620,6 +620,17 @@ fn find_in_pipelinedata(
 
             Ok(PipelineData::list_stream(stream, metadata))
         }
+        PipelineData::TableStream(stream, metadata) => {
+            let stream = stream.modify(|iter| {
+                iter.filter(move |value| {
+                    value_should_be_printed(&pattern, value, &columns_to_search, &config)
+                        != pattern.invert
+                })
+                .map(move |x| highlight_matches_in_value(&map_pattern, x, &map_columns_to_search))
+            })?;
+
+            Ok(PipelineData::table_stream(stream, metadata))
+        }
         PipelineData::ByteStream(stream, ..) => {
             let span = stream.span();
             if let Some(lines) = stream.lines() {
@@ -827,6 +838,10 @@ fn value_should_be_printed(
         Value::List { vals, .. } => vals
             .iter()
             .any(|item| value_should_be_printed(pattern, item, &[], config)),
+        Value::Table { val, .. } => val
+            .rows()
+            .iter()
+            .any(|item| value_should_be_printed(pattern, item, columns_to_search, config)),
         Value::Record { val: record, .. } => {
             let col_select = !columns_to_search.is_empty();
             record.iter().any(|(col, val)| {

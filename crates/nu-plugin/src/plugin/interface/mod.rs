@@ -398,6 +398,18 @@ impl InterfaceManager for EngineInterfaceManager {
                 });
                 Ok(PipelineData::list_stream(stream, meta))
             }
+            PipelineData::TableStream(stream, meta) => {
+                let stream = stream.modify(|rows| {
+                    rows.map(|mut value| {
+                        let span = value.span();
+                        match PluginCustomValue::deserialize_custom_values_in(&mut value) {
+                            Ok(()) => value,
+                            Err(err) => Value::error(err, span),
+                        }
+                    })
+                })?;
+                Ok(PipelineData::table_stream(stream, meta))
+            }
             PipelineData::Empty | PipelineData::ByteStream(..) => Ok(data),
         }
     }
@@ -1149,6 +1161,18 @@ impl Interface for EngineInterface {
                         .unwrap_or_else(|err| Value::error(err, span))
                 });
                 Ok(PipelineData::list_stream(stream, meta))
+            }
+            PipelineData::TableStream(stream, meta) => {
+                let stream = stream.modify(|rows| {
+                    rows.map(|mut value| {
+                        let span = value.span();
+                        match PluginCustomValue::serialize_custom_values_in(&mut value) {
+                            Ok(()) => value,
+                            Err(err) => Value::error(err, span),
+                        }
+                    })
+                })?;
+                Ok(PipelineData::table_stream(stream, meta))
             }
             PipelineData::Empty | PipelineData::ByteStream(..) => Ok(data),
         }

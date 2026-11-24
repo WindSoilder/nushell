@@ -139,6 +139,17 @@ fn getcol(head: Span, input: PipelineData) -> Result<PipelineData, ShellError> {
                 .into_pipeline_data()
                 .set_metadata(metadata))
         }
+        PipelineData::TableStream(stream, metadata) => {
+            let cols = stream
+                .columns()
+                .iter()
+                .cloned()
+                .map(|column| Value::string(column, head))
+                .collect();
+            Ok(Value::list(cols, head)
+                .into_pipeline_data()
+                .set_metadata(metadata))
+        }
         PipelineData::ByteStream(stream, ..) => Err(ShellError::OnlySupportsThisInputType {
             exp_input_type: "record or table".into(),
             wrong_type: "byte stream".into(),

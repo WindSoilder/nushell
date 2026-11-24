@@ -4,7 +4,7 @@ use nu_engine::{command_prelude::*, glob_from};
 use nu_glob::MatchOptions;
 use nu_path::{expand_path_with, expand_to_real_path};
 use nu_protocol::{
-    NuGlob, PipelineMetadata, Signals,
+    NuGlob, PipelineMetadata, Signals, TableStream, ValueIterator,
     shell_error::{self, generic::GenericError, io::IoError},
 };
 use pathdiff::diff_paths;
@@ -218,44 +218,37 @@ impl Command for Ls {
             call_span,
         };
 
+        let columns = ls_columns(long);
+        let metadata = ls_pipeline_metadata(call_span, long);
+        let signals = engine_state.signals().clone();
+
         let pattern_arg = call.rest::<Spanned<NuGlob>>(engine_state, stack, 0)?;
         let input_pattern_arg = if !call.has_positional_args(stack, 0) {
             None
         } else {
             Some(pattern_arg)
         };
-        match input_pattern_arg {
-            None => Ok(
-                ls_for_one_pattern(None, args, engine_state.signals().clone(), cwd)?
-                    .into_pipeline_data_with_metadata(
-                        call_span,
-                        engine_state.signals().clone(),
-                        ls_pipeline_metadata(call_span, long),
-                    ),
-            ),
+        let rows: ValueIterator = match input_pattern_arg {
+            None => ls_for_one_pattern(None, args, signals.clone(), cwd)?,
             Some(pattern) => {
                 let mut result_iters = vec![];
                 for pat in pattern {
                     result_iters.push(ls_for_one_pattern(
                         Some(pat),
                         args,
-                        engine_state.signals().clone(),
+                        signals.clone(),
                         cwd.clone(),
                     )?)
                 }
 
                 // Here nushell needs to use
                 // use `flatten` to chain all iterators into one.
-                Ok(result_iters
-                    .into_iter()
-                    .flatten()
-                    .into_pipeline_data_with_metadata(
-                        call_span,
-                        engine_state.signals().clone(),
-                        ls_pipeline_metadata(call_span, long),
-                    ))
+                Box::new(result_iters.into_iter().flatten())
             }
-        }
+        };
+
+        let stream = TableStream::new(columns, rows, call_span, signals)?;
+        Ok(PipelineData::table_stream(stream, metadata))
     }
 
     fn examples(&self) -> Vec<Example<'_>> {
@@ -314,6 +307,27 @@ impl Command for Ls {
     }
 }
 
+/// Ordered columns produced by `ls` for the selected output mode.
+fn ls_columns(long: bool) -> Vec<String> {
+    let mut columns = vec!["name", "type"];
+
+    if long {
+        columns.extend(["target", "readonly"]);
+
+        #[cfg(unix)]
+        columns.extend(["mode", "num_links", "inode", "user", "group"]);
+    }
+
+    columns.push("size");
+
+    if long {
+        columns.extend(["created", "accessed"]);
+    }
+
+    columns.push("modified");
+    columns.into_iter().map(String::from).collect()
+}
+
 /// Builds `ls` output metadata, including width-priority hints for compact views.
 fn ls_pipeline_metadata(span: Span, long: bool) -> PipelineMetadata {
     let mut metadata = PipelineMetadata {
@@ -334,7 +348,7 @@ fn ls_for_one_pattern(
     args: Args,
     signals: Signals,
     cwd: PathBuf,
-) -> Result<PipelineData, ShellError> {
+) -> Result<ValueIterator, ShellError> {
     fn create_pool(num_threads: usize, call_span: Span) -> Result<rayon::ThreadPool, ShellError> {
         match rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads)
@@ -394,7 +408,7 @@ fn ls_for_one_pattern(
                     .next()
                     .is_none()
                 {
-                    return Ok(Value::test_nothing().into_pipeline_data());
+                    return Ok(Box::new(std::iter::empty()));
                 }
                 just_read_dir =
                     !(pat.item.is_expand() && nu_glob::is_glob_with_backend(pat.item.as_ref()));
@@ -417,7 +431,7 @@ fn ls_for_one_pattern(
                 .next()
                 .is_none()
             {
-                return Ok(Value::test_nothing().into_pipeline_data());
+                return Ok(Box::new(std::iter::empty()));
             } else {
                 (NuGlob::Expand("*".to_string()), false)
             }
@@ -640,9 +654,7 @@ fn ls_for_one_pattern(
         });
     });
 
-    Ok(rx
-        .into_iter()
-        .into_pipeline_data(call_span, signals.clone()))
+    Ok(Box::new(rx.into_iter()))
 }
 
 fn is_hidden_dir(dir: impl AsRef<Path>) -> bool {

@@ -55,6 +55,7 @@ impl Command for SplitCellPath {
             // NOTE: Match arms can't be combined, `stream`s are of different types
             PipelineData::Value(other, _) => other.span(),
             PipelineData::ListStream(stream, ..) => stream.span(),
+            PipelineData::TableStream(stream, ..) => stream.span(),
             PipelineData::ByteStream(stream, ..) => stream.span(),
         };
         Err(ShellError::OnlySupportsThisInputType {

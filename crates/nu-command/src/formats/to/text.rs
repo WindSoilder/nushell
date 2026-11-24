@@ -122,6 +122,58 @@ impl Command for ToTextLike {
 
                 Ok(PipelineData::byte_stream(stream, update_metadata(meta)))
             }
+            PipelineData::TableStream(stream, meta) => {
+                let span = stream.span();
+                let from_io_error = IoError::factory(head, None);
+                let stream = if no_newline {
+                    let mut first = true;
+                    let mut iter = stream.into_inner();
+                    let engine_state_clone = engine_state.clone();
+                    ByteStream::from_fn(
+                        span,
+                        engine_state.signals().clone(),
+                        ByteStreamType::String,
+                        move |buf| {
+                            let Some(val) = iter.next() else {
+                                return Ok(false);
+                            };
+                            let val = val.unwrap_error()?;
+                            if first {
+                                first = false;
+                            } else {
+                                write!(buf, "{LINE_SEPARATOR_STR}").map_err(&from_io_error)?;
+                            }
+                            let str = local_into_string(
+                                &engine_state_clone,
+                                val,
+                                LINE_SEPARATOR_STR,
+                                serialize_types,
+                            );
+                            write!(buf, "{str}").map_err(&from_io_error)?;
+                            Ok(true)
+                        },
+                    )
+                } else {
+                    let engine_state_clone = engine_state.clone();
+                    ByteStream::from_result_iter(
+                        stream.into_inner().map(move |val| {
+                            let mut str = local_into_string(
+                                &engine_state_clone,
+                                val.unwrap_error()?,
+                                LINE_SEPARATOR_STR,
+                                serialize_types,
+                            );
+                            str.push_str(LINE_SEPARATOR_STR);
+                            Ok(str)
+                        }),
+                        span,
+                        engine_state.signals().clone(),
+                        ByteStreamType::String,
+                    )
+                };
+
+                Ok(PipelineData::byte_stream(stream, update_metadata(meta)))
+            }
             PipelineData::ByteStream(stream, meta) => {
                 Ok(PipelineData::byte_stream(stream, update_metadata(meta)))
             }
@@ -201,6 +253,13 @@ fn local_into_string(
         Value::String { val, .. } => val,
         Value::Glob { val, .. } => val,
         Value::List { vals: val, .. } => val
+            .into_iter()
+            .map(|x| local_into_string(engine_state, x, ", ", serialize_types))
+            .collect::<Vec<_>>()
+            .join(separator),
+        Value::Table { val, .. } => val
+            .into_owned()
+            .into_rows()
             .into_iter()
             .map(|x| local_into_string(engine_state, x, ", ", serialize_types))
             .collect::<Vec<_>>()

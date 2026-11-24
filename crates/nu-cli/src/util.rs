@@ -5,7 +5,7 @@ use nu_engine::{eval_block, eval_block_with_early_return, exit::kill_jobs_and_ex
 use nu_parser::{Token, TokenContents, lex, parse, unescape_unquote_string};
 use nu_protocol::{
     ByteStream, ByteStreamSource, ByteStreamType, ListStream, PipelineData, PipelineMetadata,
-    Reader, ShellError, Signals, Span, Value, ValueIterator,
+    Reader, ShellError, Signals, Span, TableStream, Value, ValueIterator,
     ast::Block,
     block_is_bare_last_result_with,
     debugger::WithoutDebug,
@@ -478,6 +478,13 @@ fn maybe_store_last_result(
             budget,
             engine_state.signals().clone(),
         ),
+        PipelineData::TableStream(stream, metadata) => tee_table_stream(
+            stack,
+            stream,
+            metadata,
+            budget,
+            engine_state.signals().clone(),
+        ),
         PipelineData::ByteStream(stream, metadata) => tee_byte_stream(
             stack,
             stream,
@@ -578,6 +585,7 @@ struct ListStreamTee {
     kept: Vec<Value>,
     /// [`Value::memory_size`] of a list holding `kept`.
     used: usize,
+    columns: Option<Vec<String>>,
 }
 
 impl ListStreamTee {
@@ -619,8 +627,14 @@ impl Iterator for ListStreamTee {
 impl Drop for ListStreamTee {
     fn drop(&mut self) {
         if !self.capture.nothing_read(self.kept.is_empty()) {
-            let copy = Value::list(std::mem::take(&mut self.kept), self.capture.span);
-            self.capture.store(copy);
+            let rows = std::mem::take(&mut self.kept);
+            if let Some(columns) = self.columns.take() {
+                if let Ok(copy) = Value::table_with_columns(columns, rows, self.capture.span) {
+                    self.capture.store(copy);
+                }
+            } else {
+                self.capture.store(Value::list(rows, self.capture.span));
+            }
         }
     }
 }
@@ -640,8 +654,35 @@ fn tee_list_stream(
         capture,
         kept: Vec::new(),
         used: Value::list(vec![], span).memory_size(),
+        columns: None,
     });
     PipelineData::ListStream(stream, metadata)
+}
+
+/// Wrap a table stream in a lazy tee while retaining its schema in `$ans.last`.
+fn tee_table_stream(
+    stack: &Stack,
+    stream: TableStream,
+    metadata: Option<PipelineMetadata>,
+    budget: usize,
+    signals: Signals,
+) -> PipelineData {
+    let span = stream.span();
+    let columns = stream.columns().to_vec();
+    let capture = StreamCapture::new(stack, metadata.clone(), signals, span, budget);
+    let stream = stream.modify(move |iter| ListStreamTee {
+        iter,
+        capture,
+        kept: Vec::new(),
+        used: Value::table_with_columns(columns.clone(), vec![], span)
+            .map(|value| value.memory_size())
+            .unwrap_or(0),
+        columns: Some(columns),
+    });
+    match stream {
+        Ok(stream) => PipelineData::TableStream(stream, metadata),
+        Err(err) => PipelineData::Value(Value::error(err, span), metadata),
+    }
 }
 
 /// Copies a byte stream into `$ans.last` as its bytes pass through to the consumer.

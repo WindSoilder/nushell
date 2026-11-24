@@ -606,6 +606,18 @@ impl InterfaceManager for PluginInterfaceManager {
                     meta,
                 ))
             }
+            PipelineData::TableStream(stream, meta) => {
+                let source = self.state.source.clone();
+                Ok(PipelineData::table_stream(
+                    stream.modify(move |rows| {
+                        rows.map(move |mut value| {
+                            let _ = PluginCustomValueWithSource::add_source_in(&mut value, &source);
+                            value
+                        })
+                    })?,
+                    meta,
+                ))
+            }
             PipelineData::Empty | PipelineData::ByteStream(..) => Ok(data),
         }
     }
@@ -1208,6 +1220,21 @@ impl Interface for PluginInterface {
                             Err(err) => Value::error(err, value.span()),
                         }
                     }),
+                    meta,
+                ))
+            }
+            PipelineData::TableStream(stream, meta) => {
+                let source = self.state.source.clone();
+                let state = state.clone();
+                Ok(PipelineData::table_stream(
+                    stream.modify(move |rows| {
+                        rows.map(
+                            move |mut value| match state.prepare_value(&mut value, &source) {
+                                Ok(()) => value,
+                                Err(err) => Value::error(err, value.span()),
+                            },
+                        )
+                    })?,
                     meta,
                 ))
             }

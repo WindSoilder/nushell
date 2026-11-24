@@ -331,7 +331,7 @@ fn detect_columns(
             process_string_input(input_str, args, name_span, input_span)
         }
         // Table streams are passed through directly
-        PipelineData::ListStream(_, _) => Ok(input),
+        PipelineData::ListStream(_, _) | PipelineData::TableStream(_, _) => Ok(input),
         // External command output is collected as string
         PipelineData::ByteStream(_, _) => {
             let input_str = input.collect_string("", &args.config)?;

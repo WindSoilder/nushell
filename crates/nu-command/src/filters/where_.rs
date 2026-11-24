@@ -1,6 +1,9 @@
 use crate::filters::utils::closure_result;
 use nu_engine::{ClosureEval, command_prelude::*};
-use nu_protocol::engine::{Closure, CommandType};
+use nu_protocol::{
+    TableStream,
+    engine::{Closure, CommandType},
+};
 
 #[derive(Clone)]
 pub struct Where;
@@ -67,16 +70,31 @@ Row conditions cannot be stored in a variable. To pass a condition with a variab
 
         let mut closure = ClosureEval::try_new(engine_state, stack, closure, head)?;
 
+        let table_columns = match &input {
+            PipelineData::Value(Value::Table { val, .. }, _) => Some(val.columns().to_vec()),
+            PipelineData::TableStream(stream, _) => Some(stream.columns().to_vec()),
+            _ => None,
+        };
         let metadata = input.take_metadata();
-        Ok(input
-            .into_iter_strict(head)?
-            .filter_map(
-                move |value| match closure_result(&mut closure, &value, head) {
-                    Ok(cond) => cond.is_true().then_some(value),
-                    Err(err) => Some(Value::error(err, head)),
-                },
-            )
-            .into_pipeline_data_with_metadata(head, engine_state.signals().clone(), metadata))
+        let span = input.span().unwrap_or(head);
+        let iter = input.into_iter_strict(head)?.filter_map(move |value| {
+            match closure_result(&mut closure, &value, head) {
+                Ok(cond) => cond.is_true().then_some(value),
+                Err(err) => Some(Value::error(err, head)),
+            }
+        });
+
+        match table_columns {
+            Some(columns) => Ok(PipelineData::table_stream(
+                TableStream::new(columns, iter, span, engine_state.signals().clone())?,
+                metadata,
+            )),
+            None => Ok(iter.into_pipeline_data_with_metadata(
+                head,
+                engine_state.signals().clone(),
+                metadata,
+            )),
+        }
     }
 
     fn examples(&self) -> Vec<Example<'_>> {

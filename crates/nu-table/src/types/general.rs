@@ -16,7 +16,16 @@ pub struct JustTable;
 
 impl JustTable {
     pub fn table(input: Vec<Value>, opts: TableOpts<'_>) -> StringResult {
-        list_table(input, opts)
+        list_table(input, None, opts)
+    }
+
+    /// Render rows using a declared, ordered set of columns.
+    pub fn table_with_columns(
+        input: Vec<Value>,
+        columns: &[String],
+        opts: TableOpts<'_>,
+    ) -> StringResult {
+        list_table(input, Some(columns), opts)
     }
 
     pub fn kv_table(record: Record, opts: TableOpts<'_>) -> StringResult {
@@ -24,8 +33,12 @@ impl JustTable {
     }
 }
 
-fn list_table(input: Vec<Value>, opts: TableOpts<'_>) -> Result<Option<String>, ShellError> {
-    let output = create_table(input, &opts)?;
+fn list_table(
+    input: Vec<Value>,
+    columns: Option<&[String]>,
+    opts: TableOpts<'_>,
+) -> Result<Option<String>, ShellError> {
+    let output = create_table(input, columns, &opts)?;
     let mut out = match output {
         Some(out) => out,
         None => return Ok(None),
@@ -65,12 +78,18 @@ fn kv_table(record: Record, opts: TableOpts<'_>) -> StringResult {
     Ok(table)
 }
 
-fn create_table(input: Vec<Value>, opts: &TableOpts<'_>) -> TableResult {
-    if input.is_empty() {
+fn create_table(
+    input: Vec<Value>,
+    columns: Option<&[String]>,
+    opts: &TableOpts<'_>,
+) -> TableResult {
+    if input.is_empty() && columns.is_none() {
         return Ok(None);
     }
 
-    let headers = get_columns(&input);
+    let headers = columns
+        .map(<[String]>::to_vec)
+        .unwrap_or_else(|| get_columns(&input));
     let with_index = has_index(opts, &headers);
     let with_header = !headers.is_empty();
     let row_offset = opts.index_offset;

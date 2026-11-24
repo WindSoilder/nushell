@@ -4,6 +4,20 @@ use pretty_assertions::assert_matches;
 use rstest::rstest;
 
 #[test]
+fn table_stream_rejects_columns_and_preserves_schema() -> Result {
+    test()
+        .run("[[a b]; [1 2]] | reject a | describe")
+        .expect_value_eq("table<b: int> (stream)")
+}
+
+#[test]
+fn table_stream_rejects_rows_and_preserves_schema() -> Result {
+    test()
+        .run("[[a b]; [1 2] [3 4]] | reject 1 | describe")
+        .expect_value_eq("table<a: int, b: int> (stream)")
+}
+
+#[test]
 fn regular_columns() -> Result {
     let code = "
         $in

@@ -85,6 +85,12 @@ impl Command for Items {
                 dst_span: call.head,
                 src_span: stream.span(),
             }),
+            PipelineData::TableStream(stream, ..) => Err(ShellError::OnlySupportsThisInputType {
+                exp_input_type: "record".into(),
+                wrong_type: "table stream".into(),
+                dst_span: call.head,
+                src_span: stream.span(),
+            }),
             PipelineData::ByteStream(stream, ..) => Err(ShellError::OnlySupportsThisInputType {
                 exp_input_type: "record".into(),
                 wrong_type: stream.type_().describe().into(),

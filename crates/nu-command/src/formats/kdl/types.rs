@@ -335,8 +335,8 @@ pub(crate) fn nu_literal_to_kdl(
                 Ok((KdlValue::String(format!("<{}>", val.type_name())), None))
             }
         },
-        Value::List { .. } | Value::Record { .. } => Err(ShellError::UnsupportedInput {
-            msg: "nested list/record is not a KDL literal".into(),
+        Value::List { .. } | Value::Table { .. } | Value::Record { .. } => Err(ShellError::UnsupportedInput {
+            msg: "nested collection is not a KDL literal".into(),
             input: "value originates from here".into(),
             msg_span: call_span,
             input_span: value.span(),

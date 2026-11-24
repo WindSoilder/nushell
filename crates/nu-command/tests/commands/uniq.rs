@@ -41,6 +41,13 @@ fn uniq_values() -> Result {
 }
 
 #[test]
+fn uniq_accepts_table_stream_and_retains_schema() -> Result {
+    test()
+        .run(r#""a,b\n1,2\n1,2\n" | from csv | uniq | columns | to nuon"#)
+        .expect_value_eq("[a, b]")
+}
+
+#[test]
 fn uniq_empty() -> Result {
     test().run("[] | uniq | to nuon").expect_value_eq("[]")
 }

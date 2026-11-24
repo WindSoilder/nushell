@@ -115,6 +115,10 @@ fn into_cell_path(call: &Call, input: PipelineData) -> Result<PipelineData, Shel
             let list: Vec<_> = stream.into_iter().collect();
             Ok(list_to_cell_path(&list, head)?.into_pipeline_data())
         }
+        PipelineData::TableStream(stream, ..) => {
+            let list: Vec<_> = stream.into_iter().collect();
+            Ok(list_to_cell_path(&list, head)?.into_pipeline_data())
+        }
         PipelineData::ByteStream(stream, ..) => Err(ShellError::OnlySupportsThisInputType {
             exp_input_type: "list, int".into(),
             wrong_type: stream.type_().describe().into(),

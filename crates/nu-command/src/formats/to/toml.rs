@@ -77,6 +77,9 @@ pub(crate) fn nu_value_to_toml_value(
         Value::List { vals, .. } => {
             toml::Value::Array(toml_list(engine_state, vals, serialize_types)?)
         }
+        Value::Table { val, .. } => {
+            toml::Value::Array(toml_list(engine_state, val.rows(), serialize_types)?)
+        }
         Value::Closure { val, .. } => {
             if serialize_types {
                 let block = engine_state.try_get_block(val.block_id);

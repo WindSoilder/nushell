@@ -973,6 +973,9 @@ fn eval_instruction<D: DebugContext>(
                 PipelineData::ListStream(s, ..) if need_backtrace(ctx.engine_state) => {
                     s.push_caller_span(*span)
                 }
+                PipelineData::TableStream(s, ..) if need_backtrace(ctx.engine_state) => {
+                    s.push_caller_span(*span)
+                }
                 _ => (),
             }
             // After eval_call, attach result's exit_status_future
@@ -1077,6 +1080,21 @@ fn eval_instruction<D: DebugContext>(
             ctx.put_reg(
                 *src_dst,
                 PipelineExecutionData::from(Value::list(list, list_span).into_pipeline_data()),
+            );
+            Ok(Continue)
+        }
+        Instruction::TableFromList { src_dst, columns } => {
+            let list_value = ctx.collect_reg(*src_dst, *span)?;
+            let table_span = list_value.span();
+            let rows = list_value.into_list()?;
+            let columns = columns
+                .iter()
+                .map(|reg| ctx.collect_reg(*reg, *span)?.coerce_into_string())
+                .collect::<Result<Vec<_>, _>>()?;
+            let table = Value::table_with_columns(columns, rows, table_span)?;
+            ctx.put_reg(
+                *src_dst,
+                PipelineExecutionData::from(table.into_pipeline_data()),
             );
             Ok(Continue)
         }
@@ -2442,6 +2460,19 @@ fn drain(
                 }
             }
         }
+        PipelineData::TableStream(stream, ..) => {
+            let callback_spans = stream.get_caller_spans().clone();
+            if let Err(mut err) = stream.drain() {
+                if callback_spans.is_empty() {
+                    return Err(err);
+                } else {
+                    for s in callback_spans {
+                        err = EvalBlockWithInputError::wrap(err, s, EvalBlockWithInputError::CALLER)
+                    }
+                    return Err(err);
+                }
+            }
+        }
         PipelineData::Value(Value::Error { error, .. }, ..) => return Err(*error),
         PipelineData::Value(..) | PipelineData::Empty => {}
     }
@@ -2479,7 +2510,9 @@ fn drain_if_end(
         // pipefail, so a failure after the `try` doesn't escape it.
         if matches!(
             result,
-            PipelineData::ByteStream(..) | PipelineData::ListStream(..)
+            PipelineData::ByteStream(..)
+                | PipelineData::ListStream(..)
+                | PipelineData::TableStream(..)
         ) {
             for guard in data.exit.into_iter().flatten() {
                 *guard
@@ -2565,6 +2598,15 @@ fn eval_iterate(
         if let Some(val) = list_stream.next_value() {
             ctx.put_reg(dst, PipelineExecutionData::from(val.into_pipeline_data()));
             ctx.put_reg(stream, data); // put the stream back so it can be iterated on again
+            Ok(InstructionResult::Continue)
+        } else {
+            ctx.put_reg(dst, PipelineExecutionData::empty());
+            Ok(InstructionResult::Branch(end_index))
+        }
+    } else if let PipelineData::TableStream(table_stream, _) = &mut data.body {
+        if let Some(val) = table_stream.next_value() {
+            ctx.put_reg(dst, PipelineExecutionData::from(val.into_pipeline_data()));
+            ctx.put_reg(stream, data);
             Ok(InstructionResult::Continue)
         } else {
             ctx.put_reg(dst, PipelineExecutionData::empty());

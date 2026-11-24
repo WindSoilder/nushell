@@ -1,4 +1,4 @@
-use nu_protocol::ShellError;
+use nu_protocol::{ShellError, Span};
 use nu_test_support::prelude::*;
 use pretty_assertions::assert_matches;
 use rstest::rstest;
@@ -18,6 +18,13 @@ fn changes_the_column_name() -> Result {
     let code = "$in | rename mosqueteros | get mosqueteros | length";
 
     test().run_with_data(code, sample()).expect_value_eq(4)
+}
+
+#[test]
+fn renames_empty_table_stream_schema() -> Result {
+    test()
+        .run(r#""name,age\n" | from csv | rename person | columns | to nuon"#)
+        .expect_value_eq("[person, age]")
 }
 
 #[test]
@@ -106,7 +113,16 @@ fn reports_missing_column_in_single_record() -> Result {
 
 #[test]
 fn renames_mapped_column_in_all_records() -> Result {
+    let expected = Value::table_with_columns(
+        vec!["n".into(), "age".into()],
+        vec![
+            test_record! { "n" => "Alice", "age" => 30 },
+            test_record! { "n" => "Bob", "age" => 40 },
+        ],
+        Span::test_data(),
+    )?;
+
     test()
         .run("[[name age]; [Alice 30] [Bob 40]] | rename --column {name: n}")
-        .expect_value_eq(test_table![["n", "age"]; ["Alice", 30], ["Bob", 40]])
+        .expect_value_eq(expected)
 }

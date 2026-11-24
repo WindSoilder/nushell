@@ -1,6 +1,6 @@
 use csv::{ReaderBuilder, Trim};
 use nu_protocol::{
-    ByteStream, ListStream, PipelineData, ShellError, Signals, Span, Value,
+    ByteStream, ListStream, PipelineData, ShellError, Signals, Span, TableStream, Value,
     shell_error::bridge::ShellErrorBridge,
 };
 use std::collections::{HashMap, HashSet};
@@ -30,11 +30,14 @@ fn from_delimited_stream(
     }: DelimitedReaderConfig,
     input: ByteStream,
     span: Span,
-) -> Result<ListStream, ShellError> {
+) -> Result<PipelineData, ShellError> {
     let input_reader = if let Some(stream) = input.reader() {
         stream
     } else {
-        return Ok(ListStream::new(std::iter::empty(), span, Signals::empty()));
+        return Ok(PipelineData::list_stream(
+            ListStream::new(std::iter::empty(), span, Signals::empty()),
+            None,
+        ));
     };
 
     let mut reader = ReaderBuilder::new()
@@ -65,6 +68,7 @@ fn from_delimited_stream(
         dedupe_headers(headers)
     };
 
+    let table_columns = (!noheaders && !flexible).then(|| headers.clone());
     let n = headers.len();
     // With `--flexible`, a row can have more fields than the header; the
     // generated `columnN` filler names skip anything already used by the header
@@ -97,7 +101,16 @@ fn from_delimited_stream(
         Value::record(columns.zip(values).collect(), span)
     });
 
-    Ok(ListStream::new(iter, span, Signals::empty()))
+    match table_columns {
+        Some(columns) => Ok(PipelineData::table_stream(
+            TableStream::new(columns, iter, span, Signals::empty())?,
+            None,
+        )),
+        None => Ok(PipelineData::list_stream(
+            ListStream::new(iter, span, Signals::empty()),
+            None,
+        )),
+    }
 }
 
 /// Give each repeated header name a `_N` suffix (`name`, `name_1`, `name_2`, ...).
@@ -151,10 +164,7 @@ pub(super) fn from_delimited_data(
         PipelineData::Value(value, ..) => {
             let string = value.into_string()?;
             let byte_stream = ByteStream::read_string(string, name, Signals::empty());
-            Ok(PipelineData::list_stream(
-                from_delimited_stream(config, byte_stream, name)?,
-                metadata,
-            ))
+            Ok(from_delimited_stream(config, byte_stream, name)?.set_metadata(metadata))
         }
         PipelineData::ListStream(list_stream, _) => Err(ShellError::OnlySupportsThisInputType {
             exp_input_type: "string".into(),
@@ -162,10 +172,15 @@ pub(super) fn from_delimited_data(
             dst_span: name,
             src_span: list_stream.span(),
         }),
-        PipelineData::ByteStream(byte_stream, ..) => Ok(PipelineData::list_stream(
-            from_delimited_stream(config, byte_stream, name)?,
-            metadata,
-        )),
+        PipelineData::TableStream(table_stream, _) => Err(ShellError::OnlySupportsThisInputType {
+            exp_input_type: "string".into(),
+            wrong_type: "table".into(),
+            dst_span: name,
+            src_span: table_stream.span(),
+        }),
+        PipelineData::ByteStream(byte_stream, ..) => {
+            Ok(from_delimited_stream(config, byte_stream, name)?.set_metadata(metadata))
+        }
     }
 }
 

@@ -236,6 +236,53 @@ fn update_recursive(
                 Ok(PipelineData::list_stream(stream, metadata))
             }
         }
+        PipelineData::TableStream(stream, metadata) => {
+            if matches!(cell_paths.first(), Some(PathMember::String { .. }))
+                && cell_paths.len() == 1
+            {
+                let columns = stream.columns().to_vec();
+                let cell_paths = cell_paths.to_vec();
+                let stream = if let Value::Closure { val, .. } = replacement {
+                    let mut closure = ClosureEval::try_new(engine_state, stack, *val, head_span)?;
+                    stream.modify_with_columns(columns, move |rows| {
+                        rows.map(move |mut value| {
+                            match update_value_by_closure(
+                                &mut value,
+                                &mut closure,
+                                head_span,
+                                &cell_paths,
+                            ) {
+                                Ok(()) => value,
+                                Err(err) => Value::error(err, head_span),
+                            }
+                        })
+                    })?
+                } else {
+                    stream.modify_with_columns(columns, move |rows| {
+                        rows.map(move |mut value| {
+                            match value.update_data_at_cell_path(&cell_paths, replacement.clone()) {
+                                Ok(()) => value,
+                                Err(err) => Value::error(err, head_span),
+                            }
+                        })
+                    })?
+                };
+                Ok(PipelineData::table_stream(stream, metadata))
+            } else {
+                update_recursive(
+                    engine_state,
+                    stack,
+                    head_span,
+                    replacement,
+                    stream.into_iter().into_pipeline_data_with_metadata(
+                        head_span,
+                        engine_state.signals().clone(),
+                        metadata,
+                    ),
+                    cell_paths,
+                )
+            }
+        }
         PipelineData::Empty => Err(ShellError::IncompatiblePathAccess {
             type_name: "empty pipeline".to_string(),
             span: head_span,
@@ -374,6 +421,32 @@ fn update_value_by_closure_recursive(
                         }
                     }
                 }
+                Value::Table { val, .. } => {
+                    for row in val.to_mut().rows_mut() {
+                        let row_context = row.clone();
+                        let row_span = row.span();
+                        let Value::Record { val: record, .. } = row else {
+                            return Err(ShellError::NushellFailed {
+                                msg: "table invariant violated: non-record row".into(),
+                            });
+                        };
+                        if let Some(cell) = record.to_mut().cased_mut(*casing).get_mut(col_name) {
+                            update_value_by_closure_recursive(
+                                cell,
+                                &row_context,
+                                closure,
+                                path_span,
+                                path,
+                            )?;
+                        } else if !*optional {
+                            return Err(ShellError::CantFindColumn {
+                                col_name: col_name.clone(),
+                                span: Some(path_span),
+                                src_span: row_span,
+                            });
+                        }
+                    }
+                }
                 Value::Record { val: record, .. } => {
                     if let Some(cell) = record.to_mut().cased_mut(*casing).get_mut(col_name) {
                         update_value_by_closure_recursive(
@@ -419,6 +492,22 @@ fn update_value_by_closure_recursive(
 
                         return Err(ShellError::AccessBeyondEnd {
                             max_idx: vals.len() - 1,
+                            span: path_span,
+                        });
+                    }
+                }
+                Value::Table { val, .. } => {
+                    if *row_num < val.len() {
+                        let cell = &mut val.to_mut().rows_mut()[*row_num];
+                        update_value_by_closure_recursive(
+                            cell, row_value, closure, path_span, path,
+                        )?;
+                    } else if !*optional {
+                        if val.is_empty() {
+                            return Err(ShellError::AccessEmptyContent { span: path_span });
+                        }
+                        return Err(ShellError::AccessBeyondEnd {
+                            max_idx: val.len() - 1,
                             span: path_span,
                         });
                     }

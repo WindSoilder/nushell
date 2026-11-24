@@ -73,6 +73,11 @@ impl Command for UniqBy {
             });
         }
 
+        let table_columns = match &input {
+            PipelineData::Value(Value::Table { val, .. }, _) => Some(val.columns().to_vec()),
+            PipelineData::TableStream(stream, _) => Some(stream.columns().to_vec()),
+            _ => None,
+        };
         let metadata = input.take_metadata();
 
         let columns = columns
@@ -82,7 +87,15 @@ impl Command for UniqBy {
         let mapper = Box::new(item_mapper_by_col(columns));
 
         let vec: Vec<_> = input.into_iter().collect();
-        uniq(engine_state, stack, call, vec, mapper, metadata)
+        uniq(
+            engine_state,
+            stack,
+            call,
+            vec,
+            mapper,
+            metadata,
+            table_columns,
+        )
     }
 
     fn examples(&self) -> Vec<Example<'_>> {

@@ -31,6 +31,14 @@ pub fn nu_value_to_json(
                 .collect();
             Value::Array(json_vals?)
         }
+        nu_protocol::Value::Table { val, .. } => {
+            let json_vals: Result<Vec<_>, _> = val
+                .rows()
+                .iter()
+                .map(|v| nu_value_to_json(engine_state, v, span))
+                .collect();
+            Value::Array(json_vals?)
+        }
         nu_protocol::Value::Record { val, .. } => {
             let mut map = serde_json::Map::new();
             for (k, v) in val.iter() {

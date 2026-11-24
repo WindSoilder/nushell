@@ -21,6 +21,7 @@ impl Command for First {
                     Type::List(Box::new(Type::Any)),
                     Type::Any,
                 ),
+                (Type::table(), Type::Any),
                 (Type::Binary, Type::one_of([Type::Int, Type::Binary])),
                 (Type::Range, Type::Any),
             ])
@@ -189,6 +190,18 @@ fn first_helper(
     // `LIMIT 1` query) to tell an empty input apart, so it goes on to the main `match`.
     if rows == 0 && !strict_mode {
         return match input {
+            PipelineData::Value(Value::Table { val, .. }, _) => {
+                Ok(
+                    Value::table_with_columns(val.columns().to_vec(), Vec::new(), head)?
+                        .into_pipeline_data_with_metadata(input_meta),
+                )
+            }
+            PipelineData::TableStream(stream, _) => {
+                Ok(
+                    Value::table_with_columns(stream.columns().to_vec(), Vec::new(), head)?
+                        .into_pipeline_data_with_metadata(input_meta),
+                )
+            }
             PipelineData::Value(val, _) if matches!(&val, Value::Binary { .. }) => Ok(
                 Value::binary(Vec::new(), val.span()).into_pipeline_data_with_metadata(
                     input_meta.map(|m| m.with_content_type(None)),
@@ -219,6 +232,25 @@ fn first_helper(
         PipelineData::Value(val, _) => {
             let span = val.span();
             match val {
+                Value::Table { val, .. } => {
+                    let columns = val.columns().to_vec();
+                    let vals = val.into_owned().into_rows();
+                    if return_single_element {
+                        if let Some(val) = vals.first() {
+                            Ok(val.clone().into_pipeline_data_with_metadata(input_meta))
+                        } else if strict_mode {
+                            Err(ShellError::AccessEmptyContent { span: head })
+                        } else {
+                            Ok(Value::nothing(head).into_pipeline_data_with_metadata(input_meta))
+                        }
+                    } else if strict_mode && vals.is_empty() {
+                        Err(ShellError::AccessEmptyContent { span: head })
+                    } else {
+                        let vals = vals.into_iter().take(rows).collect();
+                        Ok(Value::table_with_columns(columns, vals, span)?
+                            .into_pipeline_data_with_metadata(input_meta))
+                    }
+                }
                 Value::List { vals, .. } => {
                     if return_single_element {
                         if let Some(val) = vals.first() {
@@ -393,6 +425,42 @@ fn first_helper(
             } else {
                 Ok(PipelineData::list_stream(
                     stream.modify(|iter| iter.take(rows)),
+                    input_meta,
+                ))
+            }
+        }
+        PipelineData::TableStream(mut stream, _) => {
+            if return_single_element {
+                if let Some(v) = stream.next_value() {
+                    Ok(v.unwrap_error()?
+                        .into_pipeline_data_with_metadata(input_meta))
+                } else if strict_mode {
+                    Err(ShellError::AccessEmptyContent { span: head })
+                } else {
+                    Ok(Value::nothing(head).into_pipeline_data_with_metadata(input_meta))
+                }
+            } else if strict_mode {
+                if let Some(first) = stream.next_value() {
+                    if rows == 0 {
+                        first.unwrap_error()?;
+                        Ok(
+                            Value::table_with_columns(stream.columns().to_vec(), Vec::new(), head)?
+                                .into_pipeline_data_with_metadata(input_meta),
+                        )
+                    } else {
+                        Ok(PipelineData::table_stream(
+                            stream.modify(move |iter| {
+                                std::iter::once(first).chain(iter).take(rows)
+                            })?,
+                            input_meta,
+                        ))
+                    }
+                } else {
+                    Err(ShellError::AccessEmptyContent { span: head })
+                }
+            } else {
+                Ok(PipelineData::table_stream(
+                    stream.modify(|iter| iter.take(rows))?,
                     input_meta,
                 ))
             }

@@ -66,6 +66,7 @@ impl JsonValue {
             NuValue::Range { val, .. } => JsonValue::String(val.to_string()),
             NuValue::Record { val, .. } => record_into_json_value(val.into_owned(), mode)?,
             NuValue::List { vals, .. } => list_into_json_value(vals, mode)?,
+            NuValue::Table { val, .. } => list_into_json_value(val.into_owned().into_rows(), mode)?,
             NuValue::Closure { val, .. } => closure_into_json_value(*val, mode, span)?,
             NuValue::Error { error, .. } => return Err(*error),
             NuValue::Binary { val, .. } => binary_into_json_value(&val),

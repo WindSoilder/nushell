@@ -118,7 +118,9 @@ impl<'a> StyleComputer<'a> {
             Value::Nothing { .. } => TextStyle::with_style(Left, s),
             Value::Binary { .. } => TextStyle::with_style(Left, s),
             Value::CellPath { .. } => TextStyle::with_style(Left, s),
-            Value::Record { .. } | Value::List { .. } => TextStyle::with_style(Left, s),
+            Value::Record { .. } | Value::List { .. } | Value::Table { .. } => {
+                TextStyle::with_style(Left, s)
+            }
             Value::Closure { .. } | Value::Error { .. } => TextStyle::basic_left(),
             Value::Custom { ref val, .. } => {
                 let type_name = val.type_name();

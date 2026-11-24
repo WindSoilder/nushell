@@ -389,10 +389,13 @@ pub(crate) fn compile_expression(
                 )?;
             }
 
-            // Free the column registers, since they aren't needed anymore
-            for reg in column_registers {
-                builder.drop_reg(reg)?;
-            }
+            builder.push(
+                Instruction::TableFromList {
+                    src_dst: out_reg,
+                    columns: column_registers.into_boxed_slice(),
+                }
+                .into_spanned(expr.span),
+            )?;
 
             Ok(())
         }

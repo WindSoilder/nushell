@@ -22,7 +22,8 @@ impl Command for Sort {
                     Type::List(Box::new(Type::Any)),
                     Type::List(Box::new(Type::Any))
                 ),
-                (Type::record(), Type::record())
+                (Type::record(), Type::record()),
+                (Type::table(), Type::table()),
             ])
     .switch("reverse", "Sort in reverse order.", Some('r'))
             .switch(
@@ -159,6 +160,27 @@ impl Command for Sort {
                     natural,
                 )?;
                 Value::record(record, span)
+            }
+            Value::Table { val, .. } => {
+                let columns = val.columns().to_vec();
+                let mut rows = val.into_owned().into_rows();
+                let comparators: Vec<Comparator> = columns
+                    .iter()
+                    .map(|column| CellPath {
+                        members: vec![PathMember::string(
+                            column.clone(),
+                            false,
+                            Casing::Sensitive,
+                            call.head,
+                        )],
+                    })
+                    .map(Comparator::CellPath)
+                    .collect();
+                crate::sort_by(&mut rows, comparators, span, insensitive, natural)?;
+                if reverse {
+                    rows.reverse();
+                }
+                Value::table_with_columns(columns, rows, span)?
             }
             value @ Value::List { .. } => {
                 // If we have a table specifically, then we want to sort along each column.

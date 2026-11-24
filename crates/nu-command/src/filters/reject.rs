@@ -261,6 +261,72 @@ fn reject(
     });
 
     match input {
+        PipelineData::TableStream(stream, ..) => {
+            let rejected_rows: HashSet<usize> = new_columns
+                .iter()
+                .filter_map(|path| match path.members.as_slice() {
+                    [PathMember::Int { val, .. }] => Some(*val),
+                    _ => None,
+                })
+                .collect();
+            let column_paths: Vec<CellPath> = new_columns
+                .into_iter()
+                .filter(|path| !matches!(path.members.as_slice(), [PathMember::Int { .. }]))
+                .collect();
+
+            let mut output_columns = stream.columns().to_vec();
+            for path in &column_paths {
+                if let [
+                    PathMember::String {
+                        val,
+                        casing,
+                        optional,
+                        span: path_span,
+                    },
+                ] = path.members.as_slice()
+                {
+                    let position = output_columns.iter().position(|column| match casing {
+                        Casing::Sensitive => column == val,
+                        Casing::Insensitive => column.eq_ignore_case(val),
+                    });
+                    if let Some(position) = position {
+                        output_columns.remove(position);
+                    } else if !optional {
+                        return Err(ShellError::CantFindColumn {
+                            col_name: val.clone(),
+                            span: Some(*path_span),
+                            src_span: stream.span(),
+                        });
+                    }
+                }
+            }
+
+            let rows = stream
+                .into_iter()
+                .enumerate()
+                .filter(move |(index, _)| !rejected_rows.contains(index))
+                .map(move |(_, mut value)| {
+                    if matches!(value, Value::Error { .. }) {
+                        return value;
+                    }
+
+                    let value_span = value.span();
+                    for path in &column_paths {
+                        if let Err(error) = value.remove_data_at_cell_path(&path.members) {
+                            return Value::error(error, value_span);
+                        }
+                    }
+                    value
+                });
+            let stream = nu_protocol::TableStream::new(
+                output_columns,
+                rows,
+                span,
+                engine_state.signals().clone(),
+            )?;
+
+            Ok(PipelineData::table_stream(stream, metadata))
+        }
         PipelineData::ListStream(stream, ..) if !has_integer_path_member => {
             let result = stream
                 .into_iter()

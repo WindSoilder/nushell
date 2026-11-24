@@ -143,6 +143,7 @@ fn extract_columns(value: &Value) -> Result<Vec<String>, ShellError> {
     match value {
         Value::Record { val, .. } => Ok(val.columns().cloned().collect()),
         Value::List { vals, .. } => Ok(merge_descriptors(vals)),
+        Value::Table { val, .. } => Ok(val.columns().to_vec()),
         Value::Error { error, .. } => Err(*error.clone()),
         other => Err(make_unsupported_input_error(
             other.get_type(),
@@ -273,10 +274,19 @@ pub fn to_delimited_data(
     // also the quote byte must not be doubled a second time by escape_delimited_field.
     let escape = escape.filter(|&e| e != quote);
 
+    // A table carries an ordered schema even when it has no rows. Prefer an explicit
+    // `--columns` selection, otherwise use that schema without peeking at the first row.
+    let columns = columns.or_else(|| match &input {
+        PipelineData::Value(Value::Table { val, .. }, _) => Some(val.columns().to_vec()),
+        PipelineData::TableStream(stream, _) => Some(stream.columns().to_vec()),
+        _ => None,
+    });
+
     // Check to ensure the input is likely one of our supported types first. We can't check a stream
     // without consuming it though
     match input {
-        PipelineData::Value(Value::List { .. } | Value::Record { .. }, _) => (),
+        PipelineData::Value(Value::List { .. } | Value::Record { .. } | Value::Table { .. }, _) => {
+        }
         PipelineData::Value(Value::Error { error, .. }, _) => return Err(*error),
         PipelineData::Value(other, _) => {
             return Err(make_unsupported_input_error(other.get_type(), head, span));
@@ -284,7 +294,7 @@ pub fn to_delimited_data(
         PipelineData::ByteStream(..) => {
             return Err(make_unsupported_input_error("byte stream", head, span));
         }
-        PipelineData::ListStream(..) => (),
+        PipelineData::ListStream(..) | PipelineData::TableStream(..) => (),
         PipelineData::Empty => (),
     }
 

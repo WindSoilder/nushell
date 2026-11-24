@@ -171,7 +171,7 @@ pub trait Eval {
                         expr_span,
                     ));
                 }
-                Ok(Value::list(output_rows, expr_span))
+                Value::table_with_columns(output_headers, output_rows, expr_span)
             }
             Expr::Keyword(kw) => Self::eval::<D>(state, mut_state, &kw.expr),
             Expr::String(s) | Expr::RawString(s) => Ok(Value::string(s.clone(), expr_span)),

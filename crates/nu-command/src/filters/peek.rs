@@ -87,6 +87,25 @@ impl Command for Peek {
 
                 Ok(PipelineData::list_stream(stream, metadata))
             }
+            PipelineData::TableStream(stream, metadata) => {
+                let mut elems = None;
+                let stream = match n {
+                    Some(n) => stream.modify(|mut it| {
+                        let collect = it.as_mut().take(n).collect::<Vec<_>>();
+                        elems = Some(collect.clone());
+                        collect.into_iter().chain(it)
+                    })?,
+                    None => stream,
+                };
+                let metadata = add_peek_metadata(
+                    metadata,
+                    "table",
+                    true,
+                    elems.map(|x| x.into_value(call.head)),
+                    call.head,
+                );
+                Ok(PipelineData::table_stream(stream, metadata))
+            }
             PipelineData::ByteStream(byte_stream, pipeline_metadata) => {
                 let metadata = add_peek_metadata(
                     pipeline_metadata,

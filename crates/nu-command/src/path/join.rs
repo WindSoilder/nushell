@@ -172,6 +172,14 @@ fn run(call: &Call, args: &Arguments, input: PipelineData) -> Result<PipelineDat
             handle_value(stream.into_value()?, args, head),
             metadata,
         )),
+        PipelineData::TableStream(stream, metadata) => {
+            let span = stream.span();
+            let rows = stream.into_iter().collect();
+            Ok(PipelineData::value(
+                handle_value(Value::list(rows, span), args, head),
+                metadata,
+            ))
+        }
         PipelineData::ByteStream(stream, metadata) => Ok(PipelineData::value(
             handle_value(stream.into_value()?, args, head),
             metadata,

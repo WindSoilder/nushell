@@ -76,6 +76,17 @@ impl Command for Take {
             PipelineData::Value(val, metadata) => {
                 let span = val.span();
                 match val {
+                    Value::Table { val, .. } => {
+                        let columns = val.columns().to_vec();
+                        let rows = val
+                            .into_owned()
+                            .into_rows()
+                            .into_iter()
+                            .take(rows_desired)
+                            .collect();
+                        Ok(Value::table_with_columns(columns, rows, span)?
+                            .into_pipeline_data_with_metadata(metadata))
+                    }
                     Value::List { vals, .. } => Ok(vals
                         .into_iter()
                         .take(rows_desired)
@@ -113,6 +124,10 @@ impl Command for Take {
             }
             PipelineData::ListStream(stream, metadata) => Ok(PipelineData::list_stream(
                 stream.modify(|iter| iter.take(rows_desired)),
+                metadata,
+            )),
+            PipelineData::TableStream(stream, metadata) => Ok(PipelineData::table_stream(
+                stream.modify(|iter| iter.take(rows_desired))?,
                 metadata,
             )),
             PipelineData::ByteStream(stream, metadata) => {

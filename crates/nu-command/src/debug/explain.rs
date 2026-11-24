@@ -270,6 +270,14 @@ pub fn debug_string_without_formatting(engine_state: &EngineState, value: &Value
                 .collect::<Vec<_>>()
                 .join(" ")
         ),
+        Value::Table { val, .. } => format!(
+            "[{}]",
+            val.rows()
+                .iter()
+                .map(|v| debug_string_without_formatting(engine_state, v))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
         Value::Record { val, .. } => format!(
             "{{{}}}",
             val.iter()

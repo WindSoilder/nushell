@@ -98,6 +98,17 @@ fn drop_cols(
     // This will drop the column "a" instead of "b" even though column "b"
     // is displayed farther to the right.
     match input {
+        PipelineData::TableStream(stream, metadata) => drop_cols(
+            engine_state,
+            stream.into_iter().into_pipeline_data_with_metadata(
+                head,
+                engine_state.signals().clone(),
+                metadata,
+            ),
+            head,
+            columns,
+            from_left,
+        ),
         PipelineData::ListStream(stream, metadata) => {
             let mut stream = stream.into_iter();
             if let Some(mut first) = stream.next() {

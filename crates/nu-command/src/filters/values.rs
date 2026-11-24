@@ -180,6 +180,15 @@ fn values(
                 Err(err) => Err(err),
             }
         }
+        PipelineData::TableStream(stream, metadata) => {
+            let vals: Vec<_> = stream.into_iter().collect();
+            match get_values(&vals, head, head) {
+                Ok(cols) => Ok(cols
+                    .into_iter()
+                    .into_pipeline_data_with_metadata(head, signals, metadata)),
+                Err(err) => Err(err),
+            }
+        }
         PipelineData::ByteStream(stream, ..) => Err(ShellError::OnlySupportsThisInputType {
             exp_input_type: "record or table".into(),
             wrong_type: stream.type_().describe().into(),

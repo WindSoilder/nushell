@@ -2,8 +2,17 @@ use pretty_assertions::assert_matches;
 use rstest::rstest;
 
 use nu_experimental::REORDER_CELL_PATHS;
-use nu_protocol::{test_table, test_value};
+use nu_protocol::{Span, test_table, test_value};
 use nu_test_support::prelude::*;
+
+fn one_row_table(columns: &[&str], row: Value) -> Value {
+    Value::table_with_columns(
+        columns.iter().map(|column| (*column).into()).collect(),
+        vec![row],
+        Span::test_data(),
+    )
+    .expect("test table should have a valid schema and record row")
+}
 
 #[test]
 fn insert_the_column() -> Result {
@@ -16,6 +25,20 @@ fn insert_the_column() -> Result {
         .cwd("tests/fixtures/formats")
         .run(code)
         .expect_value_eq("0.7.0")
+}
+
+#[test]
+fn insert_adds_column_to_empty_table_stream_schema() -> Result {
+    test()
+        .run(r#""a,b\n" | from csv | insert c 1 | columns | to nuon"#)
+        .expect_value_eq("[a, b, c]")
+}
+
+#[test]
+fn insert_adds_column_to_nonempty_table_stream_schema() -> Result {
+    test()
+        .run(r#""a\n1\n" | from csv | insert b 2 | columns | to nuon"#)
+        .expect_value_eq("[a, b]")
 }
 
 #[test]
@@ -136,8 +159,8 @@ fn record_replacement_closure(#[case] code: &str, #[case] expect: impl IntoValue
 }
 
 #[rstest]
-#[case("[[a]; [text]] | insert b {|r| $r.a | str upcase }", test_value!([{"a":"text","b":"TEXT"}]))]
-#[case("[[a]; [text]] | insert b { $in.a | str upcase }", test_value!([{"a":"text","b":"TEXT"}]))]
+#[case("[[a]; [text]] | insert b {|r| $r.a | str upcase }", one_row_table(&["a", "b"], test_record! { "a" => "text", "b" => "TEXT" }))]
+#[case("[[a]; [text]] | insert b { $in.a | str upcase }", one_row_table(&["a", "b"], test_record! { "a" => "text", "b" => "TEXT" }))]
 #[case("[[b]; [1]] | wrap a | insert a.c {|r| $r.a.b }", test_value!([{"a":{"b":1,"c":1}}]))]
 #[case("[[b]; [1]] | wrap a | insert a.c { $in.a.b }", test_value!([{"a":{"b":1,"c":1}}]))]
 fn table_replacement_closure(#[case] code: &str, #[case] expect: impl IntoValue) -> Result {

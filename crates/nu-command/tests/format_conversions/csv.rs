@@ -639,3 +639,17 @@ fn empty_stream_with_explicit_columns_still_writes_header() -> Result {
 
     test().run(code).expect_value_eq("[a]")
 }
+
+#[test]
+fn schema_bearing_empty_csv_writes_header_without_columns_flag() -> Result {
+    test()
+        .run(r#""a,b\n" | from csv | to csv"#)
+        .expect_value_eq("a,b\n")
+}
+
+#[test]
+fn fixed_header_csv_is_a_table_stream() -> Result {
+    test()
+        .run(r#""a,b\n1,2\n" | from csv | describe"#)
+        .expect_value_eq("table<a: int, b: int> (stream)")
+}

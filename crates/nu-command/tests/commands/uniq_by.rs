@@ -18,6 +18,13 @@ fn removes_duplicate_rows() -> Result {
 }
 
 #[test]
+fn uniq_by_accepts_table_stream_and_retains_schema() -> Result {
+    test()
+        .run(r#""a,b\n1,2\n1,3\n" | from csv | uniq-by a | columns | to nuon"#)
+        .expect_value_eq("[a, b]")
+}
+
+#[test]
 fn uniq_when_keys_out_of_order() -> Result {
     let code = r#"[{"a": "a", "b": [1,2,3]}, {"b": [1,2,3,4], "a": "a"}] | uniq-by a"#;
     let (outcome,): (HashMap<String, Value>,) = test().run(code)?;

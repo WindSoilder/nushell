@@ -70,6 +70,7 @@ impl Command for MetadataSet {
         let mut metadata = match &mut input {
             PipelineData::Value(_, metadata)
             | PipelineData::ListStream(_, metadata)
+            | PipelineData::TableStream(_, metadata)
             | PipelineData::ByteStream(_, metadata) => metadata.take().unwrap_or_default(),
             PipelineData::Empty => return Err(ShellError::PipelineEmpty { dst_span: head }),
         };

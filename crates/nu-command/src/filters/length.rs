@@ -20,6 +20,7 @@ impl Command for Length {
         Signature::build("length")
             .input_output_types(vec![
                 (Type::List(Box::new(Type::Any)), Type::Int),
+                (Type::table(), Type::Int),
                 (Type::Binary, Type::Int),
                 (Type::Nothing, Type::Int),
                 #[cfg(feature = "sqlite")]
@@ -103,7 +104,19 @@ fn length_row(call: &Call, input: PipelineData) -> Result<PipelineData, ShellErr
         PipelineData::Value(Value::List { vals, .. }, ..) => {
             Ok(Value::int(vals.len() as i64, call.head).into_pipeline_data())
         }
+        PipelineData::Value(Value::Table { val, .. }, ..) => {
+            Ok(Value::int(val.len() as i64, call.head).into_pipeline_data())
+        }
         PipelineData::ListStream(stream, ..) => {
+            let mut count = 0;
+            for value in stream {
+                // Propagate error values instead of silently counting them (see #18928).
+                value.unwrap_error()?;
+                count += 1;
+            }
+            Ok(Value::int(count, call.head).into_pipeline_data())
+        }
+        PipelineData::TableStream(stream, ..) => {
             let mut count = 0;
             for value in stream {
                 // Propagate error values instead of silently counting them (see #18928).

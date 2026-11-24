@@ -33,6 +33,50 @@ fn simple_get_list() -> Result {
 }
 
 #[test]
+fn gets_column_from_materialized_table() -> Result {
+    test()
+        .run("[[name type]; [Cargo.toml file] [src dir]] | get name | to nuon")
+        .expect_value_eq(r#"["Cargo.toml", src]"#)
+}
+
+#[test]
+fn gets_column_from_table_stream() -> Result {
+    test()
+        .run(r#""name,type\nCargo.toml,file\nsrc,dir\n" | from csv | get name | to nuon"#)
+        .expect_value_eq(r#"["Cargo.toml", src]"#)
+}
+
+#[test]
+fn gets_column_from_empty_table_stream() -> Result {
+    test()
+        .run(r#""name,type\n" | from csv | get name | to nuon"#)
+        .expect_value_eq("[]")
+}
+
+#[test]
+fn missing_empty_table_stream_column_errors_from_schema() -> Result {
+    let err = test()
+        .run(r#""name,type\n" | from csv | get size"#)
+        .expect_shell_error()?;
+    assert_matches!(err, ShellError::CantFindColumn { col_name, .. } if col_name == "size");
+    Ok(())
+}
+
+#[test]
+fn optional_missing_materialized_table_column_preserves_row_count() -> Result {
+    test()
+        .run("[[name type]; [Cargo.toml file] [src dir]] | get -o size | to nuon")
+        .expect_value_eq("[null, null]")
+}
+
+#[test]
+fn table_get_honors_ignore_case() -> Result {
+    test()
+        .run("[[name type]; [Cargo.toml file]] | get --ignore-case NAME | to nuon")
+        .expect_value_eq(r#"["Cargo.toml"]"#)
+}
+
+#[test]
 fn fetches_a_row() -> Result {
     test()
         .run_with_data(

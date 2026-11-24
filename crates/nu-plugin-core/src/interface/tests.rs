@@ -5,11 +5,12 @@ use super::{
 };
 use nu_plugin_protocol::{
     ByteStreamInfo, ListStreamInfo, PipelineDataHeader, PluginInput, PluginOutput, StreamData,
-    StreamMessage,
+    StreamMessage, TableStreamInfo,
 };
 use nu_protocol::{
     ByteStream, ByteStreamSource, ByteStreamType, DataSource, ListStream, PipelineData,
-    PipelineMetadata, ShellError, Signals, Span, Value, engine::Sequence, shell_error::io::IoError,
+    PipelineMetadata, ShellError, Signals, Span, TableStream, Value, engine::Sequence, record,
+    shell_error::io::IoError,
 };
 use std::{path::Path, sync::Arc};
 
@@ -148,6 +149,7 @@ fn read_pipeline_data_value() -> Result<(), ShellError> {
             assert_eq!(metadata, read_metadata);
         }
         PipelineData::ListStream(..) => panic!("unexpected ListStream"),
+        PipelineData::TableStream(..) => panic!("unexpected TableStream"),
         PipelineData::ByteStream(..) => panic!("unexpected ByteStream"),
         PipelineData::Empty => panic!("unexpected Empty"),
     }
@@ -196,6 +198,30 @@ fn read_pipeline_data_list_stream() -> Result<(), ShellError> {
 
     assert!(test.has_unconsumed_write());
 
+    Ok(())
+}
+
+#[test]
+fn read_pipeline_data_table_stream() -> Result<(), ShellError> {
+    let test = TestCase::new();
+    let mut manager = TestInterfaceManager::new(&test);
+    let rows = vec![Value::test_record(record! { "a" => Value::test_int(1) })];
+    for row in &rows {
+        test.add(StreamMessage::Data(8, row.clone().into()));
+    }
+    test.add(StreamMessage::End(8));
+    let header = PipelineDataHeader::TableStream(TableStreamInfo::new(
+        8,
+        vec!["a".into(), "b".into()],
+        Span::test_data(),
+    ));
+
+    let pipe = manager.read_pipeline_data(header, &Signals::empty())?;
+    assert!(matches!(pipe, PipelineData::TableStream(..)));
+    manager.consume_all()?;
+    let value = pipe.into_value(Span::test_data())?;
+    assert_eq!(value.as_table()?.columns(), &["a", "b"]);
+    assert_eq!(value.as_table()?.rows(), rows.as_slice());
     Ok(())
 }
 
@@ -417,6 +443,42 @@ fn write_pipeline_data_list_stream() -> Result<(), ShellError> {
 
     assert!(!test.has_unconsumed_write());
 
+    Ok(())
+}
+
+#[test]
+fn write_pipeline_data_table_stream() -> Result<(), ShellError> {
+    let test = TestCase::new();
+    let manager = TestInterfaceManager::new(&test);
+    let interface = manager.get_interface();
+    let rows = vec![Value::test_record(record! { "a" => Value::test_int(1) })];
+    let stream = TableStream::new(
+        vec!["a".into(), "b".into()],
+        rows.clone().into_iter(),
+        Span::test_data(),
+        Signals::empty(),
+    )?;
+    let (header, writer) =
+        interface.init_write_pipeline_data(PipelineData::table_stream(stream, None), &())?;
+    let info = match header {
+        PipelineDataHeader::TableStream(info) => info,
+        other => panic!("unexpected header: {other:?}"),
+    };
+    assert_eq!(info.columns, ["a", "b"]);
+    writer.write()?;
+    for row in rows {
+        match test.next_written().expect("unexpected end of stream") {
+            PluginOutput::Data(id, StreamData::List(read_row)) => {
+                assert_eq!(info.id, id);
+                assert_eq!(row, read_row);
+            }
+            other => panic!("unexpected output: {other:?}"),
+        }
+    }
+    assert!(matches!(
+        test.next_written().expect("unexpected end of stream"),
+        PluginOutput::End(id) if id == info.id
+    ));
     Ok(())
 }
 

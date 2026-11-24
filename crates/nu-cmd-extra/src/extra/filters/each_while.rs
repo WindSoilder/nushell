@@ -75,7 +75,8 @@ impl Command for EachWhile {
             PipelineData::Empty => Ok(PipelineData::empty()),
             PipelineData::Value(Value::Range { .. }, ..)
             | PipelineData::Value(Value::List { .. }, ..)
-            | PipelineData::ListStream(..) => {
+            | PipelineData::ListStream(..)
+            | PipelineData::TableStream(..) => {
                 let mut closure = ClosureEval::try_new(engine_state, stack, closure, head)?;
                 Ok(input
                     .into_iter()

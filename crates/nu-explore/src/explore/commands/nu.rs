@@ -163,6 +163,10 @@ fn stream_command(
             // Stream values as they arrive
             stream_values(stream.into_iter(), &sender);
         }
+        PipelineData::TableStream(stream, ..) => {
+            let _ = sender.send(StreamMessage::Columns(stream.columns().to_vec()));
+            stream_values(stream.into_iter(), &sender);
+        }
         PipelineData::ByteStream(stream, ..) => {
             // ByteStream - collect to string and show as preview
             let span = stream.span();

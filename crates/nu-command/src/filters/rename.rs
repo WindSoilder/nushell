@@ -103,7 +103,7 @@ fn rename(
     engine_state: &EngineState,
     stack: &mut Stack,
     call: &Call,
-    mut input: PipelineData,
+    input: PipelineData,
 ) -> Result<PipelineData, ShellError> {
     let head = call.head;
     let columns: Vec<String> = call.rest(engine_state, stack, 0)?;
@@ -142,6 +142,82 @@ fn rename(
         .map(|closure| ClosureEval::try_new(engine_state, stack, closure, call.head))
         .transpose()?;
 
+    let mut input = input.into_stream_or_original(engine_state);
+    let metadata = input.take_metadata();
+
+    if let PipelineData::TableStream(stream, _) = input {
+        let old_columns = stream.columns().to_vec();
+        let mut renamed_columns = Vec::with_capacity(old_columns.len());
+
+        for (index, column) in old_columns.iter().enumerate() {
+            let renamed = if let Some(closure) = &mut closure {
+                closure
+                    .run_with_value(Value::string(column, head))?
+                    .collect_string_strict(head)?
+                    .0
+            } else if let Some(specified_column) = &specified_column {
+                specified_column
+                    .get(column)
+                    .cloned()
+                    .unwrap_or_else(|| column.clone())
+            } else {
+                columns
+                    .get(index)
+                    .cloned()
+                    .unwrap_or_else(|| column.clone())
+            };
+            renamed_columns.push(renamed);
+        }
+
+        if let Some(specified_column) = &specified_column
+            && let Some(missing) = specified_column
+                .keys()
+                .find(|column| !old_columns.contains(column))
+        {
+            return Err(ShellError::UnsupportedInput {
+                msg: format!("cannot rename column '{missing}'"),
+                input: format!("this table's schema is missing column '{missing}'"),
+                msg_span: head,
+                input_span: stream.span(),
+            });
+        }
+
+        ensure_unique_column_names(&renamed_columns, stream.span())?;
+        let mapping: IndexMap<String, String> = old_columns
+            .into_iter()
+            .zip(renamed_columns.iter().cloned())
+            .collect();
+        let stream = stream.modify_with_columns(renamed_columns, move |rows| {
+            rows.map(move |item| {
+                let span = item.span();
+                match item {
+                    Value::Record { val, .. } => Value::record(
+                        val.into_owned()
+                            .into_iter()
+                            .map(|(column, value)| {
+                                let renamed = mapping.get(&column).cloned().unwrap_or(column);
+                                (renamed, value)
+                            })
+                            .collect(),
+                        span,
+                    ),
+                    Value::Error { .. } => item,
+                    other => Value::error(
+                        ShellError::OnlySupportsThisInputType {
+                            exp_input_type: "record".into(),
+                            wrong_type: other.get_type().to_string(),
+                            dst_span: head,
+                            src_span: other.span(),
+                        },
+                        head,
+                    ),
+                }
+            })
+        })?;
+
+        return Ok(PipelineData::table_stream(stream, metadata));
+    }
+
     // Use the table's zero-based row indices even when all rows share a source span.
     let mut next_row = (specified_column.is_some()
         && closure.is_none()
@@ -151,7 +227,6 @@ fn rename(
         ))
     .then_some(0usize);
 
-    let metadata = input.take_metadata();
     input
         .map(
             move |item| {
@@ -263,8 +338,15 @@ fn rename(
 
 /// Reject a rename whose result would use the same column name twice
 fn ensure_unique_columns(record: &Record, span: Span) -> Result<(), ShellError> {
+    ensure_unique_column_names(record.columns(), span)
+}
+
+fn ensure_unique_column_names<'a>(
+    columns: impl IntoIterator<Item = &'a String>,
+    span: Span,
+) -> Result<(), ShellError> {
     let mut seen = HashSet::new();
-    for column in record.columns() {
+    for column in columns {
         if !seen.insert(column) {
             return Err(ShellError::ColumnDefinedTwice {
                 col_name: column.clone(),

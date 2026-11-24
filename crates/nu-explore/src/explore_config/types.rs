@@ -65,7 +65,7 @@ impl NuValueType {
             nu_protocol::Value::Int { .. } => NuValueType::Int,
             nu_protocol::Value::Float { .. } => NuValueType::Float,
             nu_protocol::Value::String { .. } => NuValueType::String,
-            nu_protocol::Value::List { .. } => NuValueType::List,
+            nu_protocol::Value::List { .. } | nu_protocol::Value::Table { .. } => NuValueType::List,
             nu_protocol::Value::Record { .. } => NuValueType::Record,
             nu_protocol::Value::Closure { .. } => NuValueType::Closure,
             nu_protocol::Value::Filesize { .. } => NuValueType::Filesize,

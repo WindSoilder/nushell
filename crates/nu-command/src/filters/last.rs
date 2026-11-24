@@ -22,6 +22,7 @@ impl Command for Last {
                     Type::List(Box::new(Type::Any)),
                     Type::Any,
                 ),
+                (Type::table(), Type::Any),
                 (Type::Binary, Type::one_of([Type::Int, Type::Binary])),
                 (Type::Range, Type::Any),
             ])
@@ -162,6 +163,11 @@ fn last_helper(
     let rows = rows.unwrap_or(1);
 
     let mut input = input;
+    let table_columns = match &input {
+        PipelineData::Value(Value::Table { val, .. }, _) => Some(val.columns().to_vec()),
+        PipelineData::TableStream(stream, _) => Some(stream.columns().to_vec()),
+        _ => None,
+    };
     let metadata = input.take_metadata();
 
     if is_filesize {
@@ -188,6 +194,18 @@ fn last_helper(
     // to tell an empty input apart, so it goes on to the main `match`.
     if rows == 0 && !strict_mode {
         return match input {
+            PipelineData::Value(Value::Table { val, .. }, _) => {
+                Ok(
+                    Value::table_with_columns(val.columns().to_vec(), Vec::new(), head)?
+                        .into_pipeline_data_with_metadata(metadata),
+                )
+            }
+            PipelineData::TableStream(stream, _) => {
+                Ok(
+                    Value::table_with_columns(stream.columns().to_vec(), Vec::new(), head)?
+                        .into_pipeline_data_with_metadata(metadata),
+                )
+            }
             PipelineData::Value(val, _) if matches!(&val, Value::Binary { .. }) => {
                 Ok(Value::binary(Vec::new(), val.span())
                     .into_pipeline_data_with_metadata(metadata.map(|m| m.with_content_type(None))))
@@ -220,7 +238,9 @@ fn last_helper(
     let exit_status = input.clone_exit_status_future();
 
     match input {
-        PipelineData::ListStream(_, _) | PipelineData::Value(Value::Range { .. }, _) => {
+        PipelineData::ListStream(_, _)
+        | PipelineData::TableStream(_, _)
+        | PipelineData::Value(Value::Range { .. }, _) => {
             let iterator = input.into_iter_strict(head)?;
 
             // only keep the last `rows` in memory
@@ -254,14 +274,43 @@ fn last_helper(
             } else if strict_mode && buf.is_empty() {
                 Err(ShellError::AccessEmptyContent { span: head })
             } else if rows == 0 {
-                Ok(Value::list(Vec::new(), head).into_pipeline_data_with_metadata(metadata))
+                let value = match table_columns {
+                    Some(columns) => Value::table_with_columns(columns, Vec::new(), head)?,
+                    None => Value::list(Vec::new(), head),
+                };
+                Ok(value.into_pipeline_data_with_metadata(metadata))
             } else {
-                Ok(Value::list(buf.into(), head).into_pipeline_data_with_metadata(metadata))
+                let values = Vec::from(buf);
+                let value = match table_columns {
+                    Some(columns) => Value::table_with_columns(columns, values, head)?,
+                    None => Value::list(values, head),
+                };
+                Ok(value.into_pipeline_data_with_metadata(metadata))
             }
         }
         PipelineData::Value(val, _) => {
             let span = val.span();
             match val {
+                Value::Table { val, .. } => {
+                    let columns = val.columns().to_vec();
+                    let vals = val.into_owned().into_rows();
+                    if return_single_element {
+                        if let Some(v) = vals.last() {
+                            Ok(v.clone().into_pipeline_data_with_metadata(metadata))
+                        } else if strict_mode {
+                            Err(ShellError::AccessEmptyContent { span: head })
+                        } else {
+                            Ok(Value::nothing(head).into_pipeline_data_with_metadata(metadata))
+                        }
+                    } else if strict_mode && vals.is_empty() {
+                        Err(ShellError::AccessEmptyContent { span: head })
+                    } else {
+                        let start = vals.len().saturating_sub(rows);
+                        let vals = vals.into_iter().skip(start).collect();
+                        Ok(Value::table_with_columns(columns, vals, span)?
+                            .into_pipeline_data_with_metadata(metadata))
+                    }
+                }
                 Value::List { vals, .. } => {
                     if return_single_element {
                         if let Some(v) = vals.last() {

@@ -75,10 +75,20 @@ impl ExpandedTable {
     }
 
     pub fn build_list(self, vals: &[Value], opts: TableOpts<'_>) -> StringResult {
+        self.build_list_with_columns(vals, None, opts)
+    }
+
+    /// Build a list table using declared columns instead of inferring them from rows.
+    pub fn build_list_with_columns(
+        self,
+        vals: &[Value],
+        columns: Option<&[String]>,
+        opts: TableOpts<'_>,
+    ) -> StringResult {
         let width = opts.width;
         let cfg = Cfg::new(opts, self, true);
 
-        let Some(layout) = list_layout(vals, &cfg, width)? else {
+        let Some(layout) = list_layout(vals, columns, &cfg, width)? else {
             return Ok(None);
         };
         let drawn = layout.draw_stretched(width, width, &cfg);
@@ -295,14 +305,17 @@ fn fallback_text(value: &Value, kind: CellKind, cfg: &Cfg<'_>) -> NuText {
 /// Lays out a list as a table at most `width` wide.
 fn list_layout<'v>(
     vals: &'v [Value],
+    columns: Option<&[String]>,
     cfg: &Cfg<'_>,
     width: usize,
 ) -> Result<Option<Layout<'v>>, ShellError> {
-    if vals.is_empty() {
+    if vals.is_empty() && columns.is_none() {
         return Ok(None);
     }
 
-    let headers = get_columns(vals);
+    let headers = columns
+        .map(<[String]>::to_vec)
+        .unwrap_or_else(|| get_columns(vals));
     let with_index = has_index(&cfg.opts, &headers);
     // The INDEX header is dropped: its values fill the index column instead.
     let headers: Vec<_> = headers
@@ -505,7 +518,7 @@ fn build_cell<'v>(value: &'v Value, cfg: &Cfg<'_>, kind: CellKind, width: usize)
                 return Cell::Text((text, TextStyle::default()));
             }
 
-            fits.then(|| list_layout(vals, &inner_cfg(), width).ok().flatten())
+            fits.then(|| list_layout(vals, None, &inner_cfg(), width).ok().flatten())
                 .flatten()
         }
         Value::Record { .. } => None,

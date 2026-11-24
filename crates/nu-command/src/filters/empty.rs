@@ -67,6 +67,15 @@ pub fn empty(
                     Ok(Value::bool(empty, head).into_pipeline_data())
                 }
             }
+            PipelineData::TableStream(s, ..) => {
+                let mut iter = s.into_iter();
+                let empty = match iter.next() {
+                    Some(Value::Error { error, .. }) => return Err(*error),
+                    Some(_) => false,
+                    None => true,
+                };
+                Ok(Value::bool(if negate { !empty } else { empty }, head).into_pipeline_data())
+            }
             PipelineData::Value(value, ..) => {
                 let empty = match value {
                     Value::Error { error, .. } => return Err(*error),

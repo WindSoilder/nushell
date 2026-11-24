@@ -1,8 +1,10 @@
 //! Implements the stream multiplexing interface for both the plugin side and the engine side.
 
-use nu_plugin_protocol::{ByteStreamInfo, ListStreamInfo, PipelineDataHeader, StreamMessage};
+use nu_plugin_protocol::{
+    ByteStreamInfo, ListStreamInfo, PipelineDataHeader, StreamMessage, TableStreamInfo,
+};
 use nu_protocol::{
-    ByteStream, ListStream, PipelineData, Reader, ShellError, Signals,
+    ByteStream, ListStream, PipelineData, Reader, ShellError, Signals, TableStream,
     engine::Sequence,
     shell_error::{bridge::ShellErrorBridge, io::IoError},
 };
@@ -204,6 +206,15 @@ pub trait InterfaceManager {
                 let ls = ListStream::new(reader, info.span, signals.clone());
                 PipelineData::list_stream(ls, info.metadata)
             }
+            PipelineDataHeader::TableStream(info) => {
+                let handle = self.stream_manager().get_handle();
+                let reader = handle
+                    .read_stream(info.id, self.get_interface())?
+                    .with_span(info.span);
+                cancellation = Some(reader.cancellation());
+                let stream = TableStream::new(info.columns, reader, info.span, signals.clone())?;
+                PipelineData::table_stream(stream, info.metadata)
+            }
             PipelineDataHeader::ByteStream(info) => {
                 let handle = self.stream_manager().get_handle();
                 let reader = handle
@@ -291,6 +302,19 @@ pub trait Interface: Clone + Send {
                     PipelineDataWriter::ListStream(writer, stream),
                 ))
             }
+            PipelineData::TableStream(stream, metadata) => {
+                let (id, writer) = new_stream(LIST_STREAM_HIGH_PRESSURE)?;
+                let columns = stream.columns().to_vec();
+                Ok((
+                    PipelineDataHeader::TableStream(TableStreamInfo {
+                        id,
+                        columns,
+                        span: stream.span(),
+                        metadata,
+                    }),
+                    PipelineDataWriter::TableStream(writer, stream),
+                ))
+            }
             PipelineData::ByteStream(stream, metadata) => {
                 let span = stream.span();
                 let type_ = stream.type_();
@@ -332,6 +356,7 @@ pub enum PipelineDataWriter<W: WriteStreamMessage> {
     #[default]
     None,
     ListStream(StreamWriter<W>, ListStream),
+    TableStream(StreamWriter<W>, TableStream),
     ByteStream(StreamWriter<W>, Reader),
 }
 
@@ -344,9 +369,9 @@ where
     pub fn cancel_input_on_drop(&self, input: StreamReaderSignal) {
         match self {
             Self::None => (),
-            Self::ListStream(writer, _) | Self::ByteStream(writer, _) => {
-                writer.cancel_input_on_drop(input)
-            }
+            Self::ListStream(writer, _)
+            | Self::TableStream(writer, _)
+            | Self::ByteStream(writer, _) => writer.cancel_input_on_drop(input),
         }
     }
 
@@ -357,6 +382,10 @@ where
             PipelineDataWriter::None => Ok(()),
             // Write a list stream.
             PipelineDataWriter::ListStream(mut writer, stream) => {
+                writer.write_all(stream)?;
+                Ok(())
+            }
+            PipelineDataWriter::TableStream(mut writer, stream) => {
                 writer.write_all(stream)?;
                 Ok(())
             }
@@ -414,7 +443,9 @@ where
         if let Some(guard) = guard {
             match self {
                 Self::None => (),
-                Self::ListStream(writer, _) | Self::ByteStream(writer, _) => {
+                Self::ListStream(writer, _)
+                | Self::TableStream(writer, _)
+                | Self::ByteStream(writer, _) => {
                     writer.keep_input_alive(guard);
                 }
             }

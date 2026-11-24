@@ -492,11 +492,26 @@ fn handle_table_command(mut input: CmdInput<'_>) -> ShellResult<PipelineData> {
             let stream = ListStream::new(vals.into_iter(), span, signals);
             input.data = PipelineData::empty();
 
-            handle_row_stream(input, stream, metadata)
+            handle_row_stream(input, stream, None, metadata)
+        }
+        PipelineData::Value(Value::Table { val, .. }, metadata) => {
+            let columns = val.columns().to_vec();
+            let signals = input.engine_state.signals().clone();
+            let stream = ListStream::new(val.into_owned().into_rows().into_iter(), span, signals);
+            input.data = PipelineData::empty();
+
+            handle_row_stream(input, stream, Some(columns), metadata)
         }
         PipelineData::ListStream(stream, metadata) => {
             input.data = PipelineData::empty();
-            handle_row_stream(input, stream, metadata)
+            handle_row_stream(input, stream, None, metadata)
+        }
+        PipelineData::TableStream(stream, metadata) => {
+            let columns = stream.columns().to_vec();
+            let signals = input.engine_state.signals().clone();
+            let stream = ListStream::new(stream.into_iter(), span, signals);
+            input.data = PipelineData::empty();
+            handle_row_stream(input, stream, Some(columns), metadata)
         }
         PipelineData::Value(Value::Record { val, .. }, metadata) => {
             input.data = PipelineData::empty();
@@ -522,7 +537,7 @@ fn handle_table_command(mut input: CmdInput<'_>) -> ShellResult<PipelineData> {
             let stream =
                 ListStream::new(val.into_range_iter(span, Signals::empty()), span, signals);
             input.data = PipelineData::empty();
-            handle_row_stream(input, stream, metadata)
+            handle_row_stream(input, stream, None, metadata)
         }
         x => Ok(x),
     }
@@ -742,6 +757,7 @@ fn build_table_kv(
 
 fn build_table_batch(
     mut vals: Vec<Value>,
+    columns: Option<&[String]>,
     view: TableView,
     opts: TableOpts<'_>,
     span: Span,
@@ -762,16 +778,21 @@ fn build_table_batch(
     }
 
     match view {
-        TableView::General => JustTable::table(vals, opts),
+        TableView::General => match columns {
+            Some(columns) => JustTable::table_with_columns(vals, columns, opts),
+            None => JustTable::table(vals, opts),
+        },
         TableView::Expanded {
             limit,
             flatten,
             flatten_separator,
         } => {
             let sep = flatten_separator.unwrap_or_else(|| String::from(' '));
-            ExpandedTable::new(limit, flatten, sep).build_list(&vals, opts)
+            ExpandedTable::new(limit, flatten, sep).build_list_with_columns(&vals, columns, opts)
         }
         TableView::Collapsed => {
+            // The collapsed renderer recursively discovers record keys from the rows.
+            // Keep its list representation; declared columns are a paging concern here.
             let value = Value::list(vals, span);
             CollapsedTable::build(value, opts)
         }
@@ -781,6 +802,7 @@ fn build_table_batch(
 fn handle_row_stream(
     mut input: CmdInput<'_>,
     stream: ListStream,
+    columns: Option<Vec<String>>,
     metadata: Option<PipelineMetadata>,
 ) -> ShellResult<PipelineData> {
     input.cfg.width_priority_columns = get_width_priority_columns(metadata.as_ref());
@@ -876,6 +898,7 @@ fn handle_row_stream(
     let paginator = PagingTableCreator::new(
         input.call.head,
         stream,
+        columns,
         // These are passed in as a way to have PagingTable create StyleComputers
         // for the values it outputs. Because engine_state is passed in, config doesn't need to.
         input.engine_state.clone(),
@@ -938,6 +961,7 @@ fn make_clickable_link(
 struct PagingTableCreator {
     head: Span,
     stream: ValueIterator,
+    columns: Option<Vec<String>>,
     engine_state: EngineState,
     stack: Stack,
     elements_displayed: usize,
@@ -951,6 +975,7 @@ impl PagingTableCreator {
     fn new(
         head: Span,
         stream: ListStream,
+        columns: Option<Vec<String>>,
         engine_state: EngineState,
         stack: Stack,
         table_config: TableConfig,
@@ -959,6 +984,7 @@ impl PagingTableCreator {
         PagingTableCreator {
             head,
             stream: stream.into_inner(),
+            columns,
             engine_state,
             stack,
             config,
@@ -970,12 +996,18 @@ impl PagingTableCreator {
     }
 
     fn build_table(&mut self, batch: Vec<Value>) -> ShellResult<Option<String>> {
-        if batch.is_empty() {
+        if batch.is_empty() && self.columns.is_none() {
             return Ok(None);
         }
 
         let opts = self.create_table_opts();
-        build_table_batch(batch, self.table_config.view.clone(), opts, self.head)
+        build_table_batch(
+            batch,
+            self.columns.as_deref(),
+            self.table_config.view.clone(),
+            opts,
+            self.head,
+        )
     }
 
     fn create_table_opts(&self) -> TableOpts<'_> {
@@ -1030,8 +1062,25 @@ impl Iterator for PagingTableCreator {
                 // Increase elements_displayed by one so on next iteration next branch of this
                 // if else triggers and terminates stream
                 self.elements_displayed = 1;
+                if self
+                    .columns
+                    .as_ref()
+                    .is_some_and(|columns| !columns.is_empty())
+                {
+                    return convert_table_to_output(
+                        self.build_table(batch),
+                        self.engine_state.signals(),
+                        self.table_config.width,
+                        self.table_config.use_ansi_coloring,
+                    );
+                }
+                let kind = if self.columns.is_some() {
+                    "table"
+                } else {
+                    "list"
+                };
                 let result = create_empty_placeholder(
-                    "list",
+                    kind,
                     self.table_config.width,
                     &self.engine_state,
                     &self.stack,
